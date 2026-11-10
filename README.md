@@ -1,0 +1,1 @@
+# ParsGate - Filter for Windows
