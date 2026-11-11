@@ -193,15 +193,23 @@ jobs:
 
       - name: Create Release v0.1
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: pwsh
-        run: |
-          $installerPath = "${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe"
-          Write-Host "=== Checking installer file ==="
-          ls $installerPath
-          Write-Host "=== Checking gh CLI ==="
-          gh --version
-          Write-Host "=== Uploading asset to release v0.1 ==="
-          gh release upload v0.1 $installerPath --clobber
-          Write-Host "Asset uploaded successfully"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.1
+          name: ParsGate v0.1.1
+          body: |
+            ## ParsGate v0.1.1 - Initial Release with Installer
+            
+            Windows VPN/circumvention tool with:
+            - Xray-core (SOCKS5) + sing-box (TUN) core engines
+            - Iran Direct routing (geoip-ir, geosite-ir)
+            - Split Tunneling (process/domain/IP based)
+            - Kill Switch with anti-lockout
+            - NVDA-accessible high-contrast UI (RTL, Persian)
+            - Silent elevated execution via Task Scheduler
+          files: ${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe
+          generate_release_notes: false
+          make_latest: true
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
