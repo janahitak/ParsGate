@@ -6,9 +6,6 @@
              FlowDirection="RightToLeft">
     <Application.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/ParsGate;component/Assets/Fonts/Vazirmatn-Bold.ttf" />
-            </ResourceDictionary.MergedDictionaries>
 
             <!-- Global Colors -->
             <Color x:Key="ColorBackground">#000000</Color>
