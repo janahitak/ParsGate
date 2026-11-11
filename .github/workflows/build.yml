@@ -83,7 +83,6 @@ jobs:
 
       - name: Download sing-box
         run: |
-          # Get latest sing-box release asset for windows-amd64
           $api = "https://api.github.com/repos/SagerNet/sing-box/releases/latest"
           $release = Invoke-RestMethod -Uri $api -Headers @{Accept="application/vnd.github.v3+json"}
           $asset = $release.assets | Where-Object { $_.name -like "sing-box-*-windows-amd64.zip" -and $_.name -notlike "*legacy*" } | Select-Object -First 1
@@ -108,7 +107,6 @@ jobs:
         run: |
           mkdir src\ParsGate\publish\rules -Force
           $baseUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download"
-          # Download v2ray format .dat files (contain Iran categories)
           $files = @("geoip.dat", "geosite.dat")
           foreach ($file in $files) {
             $url = "$baseUrl/$file"
@@ -116,7 +114,6 @@ jobs:
             Write-Host "Downloading $file..."
             Invoke-WebRequest -Uri $url -OutFile $out
           }
-          # Also copy as .srs names for compatibility (sing-box can use v2ray .dat format)
           Copy-Item "src\ParsGate\publish\rules\geoip.dat" "src\ParsGate\publish\rules\geoip-ir.srs" -Force
           Copy-Item "src\ParsGate\publish\rules\geosite.dat" "src\ParsGate\publish\rules\geosite-ir.srs" -Force
 
@@ -148,7 +145,6 @@ jobs:
           $isccExitCode = $LASTEXITCODE
           Pop-Location
           echo "=== After Pop-Location PWD: $(Get-Location) ==="
-          # Write log to workspace root
           $isccOutput | Out-File -FilePath "iscc.log" -Encoding utf8
           echo "=== Wrote iscc.log to workspace root ==="
           ls -la iscc.log
@@ -177,11 +173,11 @@ jobs:
           path: iscc.log
           retention-days: 30
 
-      - name: Upload installer
+      - name: Upload installer artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: installer
+          name: pars-gate-installer
           path: installer/ParsGate-Setup-v0.1.exe
           retention-days: 30
 
@@ -191,22 +187,40 @@ jobs:
           echo "ISCC failed, see iscc-log artifact for details"
           exit 1
 
-      - name: Upload installer to release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: pwsh
-        run: |
-          $installerPath = "${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe"
-          Write-Host "=== Checking installer file ==="
-          ls $installerPath
-          Write-Host "=== Uploading asset to release v0.1.1 via GitHub API ==="
-          $releaseId = 441230116
-          $uploadUrl = "https://uploads.github.com/repos/janahitak/ParsGate/releases/$releaseId/assets?name=ParsGate-Setup-v0.1.exe"
-          $headers = @{
-            "Authorization" = "token ${{ secrets.GITHUB_TOKEN }}"
-            "Content-Type" = "application/octet-stream"
-          }
-          $fileBytes = [System.IO.File]::ReadAllBytes($installerPath)
-          $response = Invoke-RestMethod -Uri $uploadUrl -Method Post -Headers $headers -Body $fileBytes
-          Write-Host "Asset uploaded successfully: $($response.browser_download_url)"
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pars-gate-installer
+          path: installer/
+
+      - name: Create Release v0.1.1
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.1
+          name: ParsGate v0.1.1
+          body: |
+            ## ParsGate v0.1.1 - Initial Release with Installer
+            
+            Windows VPN/circumvention tool with:
+            - Xray-core (SOCKS5) + sing-box (TUN) core engines
+            - Iran Direct routing (geoip-ir, geosite-ir)
+            - Split Tunneling (process/domain/IP based)
+            - Kill Switch with anti-lockout
+            - NVDA-accessible high-contrast UI (RTL, Persian)
+            - Silent elevated execution via Task Scheduler
+          files: installer/ParsGate-Setup-v0.1.exe
+          generate_release_notes: false
+          make_latest: true
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
