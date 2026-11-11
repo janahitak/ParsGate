@@ -1,241 +1,604 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
-using System.Runtime.CompilerServices;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
 using Microsoft.Win32;
 using ParsGate.Models;
 using ParsGate.Services;
 
 namespace ParsGate.Views
 {
-    public partial class MainWindow : Window, INotifyPropertyChanged
+    public partial class MainWindow : Window
     {
         private AppSettings _settings;
-        private ObservableCollection<VpnConfigItem> _configs = new();
+        private readonly ObservableCollection<VpnConfigItem> _configs = new();
+        private VpnConfigItem? _selectedConfig;
+        private bool _isConnecting = false;
+        
+        // System Tray
+        private System.Windows.Forms.NotifyIcon? _notifyIcon;
+        private bool _isMinimizedToTray = false;
 
-        public ObservableCollection<VpnConfigItem> Configs
-        {
-            get => _configs;
-            set { _configs = value; OnPropertyChanged(); }
-        }
+        // Global Hotkey
+        private const int HOTKEY_ID = 9000;
+        private const uint MOD_CONTROL = 0x0002;
+        private const uint MOD_SHIFT = 0x0004;
+        private const uint VK_V = 0x56;
+        private HwndSource? _hwndSource;
+
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
         public MainWindow()
         {
             InitializeComponent();
             DataContext = this;
             LoadSettings();
-            LoadConfigs();
+            RefreshConfigComboBox();
+            CoreManager.StatusChanged += OnCoreStatusChanged;
+        }
+
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Register global hotkey Ctrl+Shift+V
+            var helper = new WindowInteropHelper(this);
+            _hwndSource = HwndSource.FromHwnd(helper.Handle);
+            _hwndSource?.AddHook(WndProc);
+            RegisterHotKey(helper.Handle, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_V);
+
+            // Setup system tray
+            SetupTrayIcon();
+
+            // Focus the connect button
+            BtnConnectDisconnect.Focus();
+
+            // Auto-connect if enabled
+            if (_settings.AutoConnectOnStart && _settings.SelectedConfigId != null)
+            {
+                var config = _configs.FirstOrDefault(c => c.Id == _settings.SelectedConfigId);
+                if (config != null)
+                {
+                    _ = ConnectAsync(config);
+                }
+            }
+
+            // Auto-update subscriptions if enabled
+            if (_settings.AutoUpdateSubsOnStart && _settings.SubscriptionUrls.Count > 0)
+            {
+                _ = UpdateSubscriptionsAsync();
+            }
+
+            UpdateLiveStatus("ParsGate آماده است. Space برای اتصال، Ctrl+V برای ورود کانفیگ از کلیپ‌بورد، F5 برای تست پینگ.");
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (!_isMinimizedToTray)
+            {
+                e.Cancel = true;
+                HideToTray();
+            }
+        }
+
+        private void Window_StateChanged(object sender, EventArgs e)
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                HideToTray();
+            }
+        }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Space && Keyboard.FocusedElement == BtnConnectDisconnect)
+            {
+                BtnConnectDisconnect_Click(sender, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                BtnAddFromClipboard_Click(sender, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.F5)
+            {
+                BtnTestPing_Click(sender, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && IsConnected)
+            {
+                BtnConnectDisconnect_Click(sender, new RoutedEventArgs());
+                e.Handled = true;
+            }
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_HOTKEY = 0x0312;
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    BtnConnectDisconnect_Click(this, new RoutedEventArgs());
+                }));
+                handled = true;
+            }
+            return IntPtr.Zero;
+        }
+
+        private void SetupTrayIcon()
+        {
+            try
+            {
+                _notifyIcon = new System.Windows.Forms.NotifyIcon
+                {
+                    Icon = System.Drawing.SystemIcons.Application,
+                    Text = "ParsGate v0.1",
+                    Visible = true
+                };
+
+                var menu = new System.Windows.Forms.ContextMenuStrip();
+                menu.Items.Add("باز کردن ParsGate", null, (s, e) => ShowFromTray());
+                menu.Items.Add("خروج کامل", null, (s, e) => ExitApplication());
+                _notifyIcon.ContextMenuStrip = menu;
+                _notifyIcon.DoubleClick += (s, e) => ShowFromTray();
+            }
+            catch { }
+        }
+
+        private void HideToTray()
+        {
+            Hide();
+            _isMinimizedToTray = true;
+            if (_notifyIcon != null)
+            {
+                _notifyIcon.ShowBalloonTip(1000, "ParsGate", "برنامه در نوار وظیفه در حال اجراست", System.Windows.Forms.ToolTipIcon.Info);
+            }
+        }
+
+        private void ShowFromTray()
+        {
+            Show();
+            WindowState = WindowState.Normal;
+            _isMinimizedToTray = false;
+            Activate();
+            BtnConnectDisconnect.Focus();
+        }
+
+        private void ExitApplication()
+        {
+            _isMinimizedToTray = false;
+            CoreManager.StatusChanged -= OnCoreStatusChanged;
+            _hwndSource?.RemoveHook(WndProc);
+            var helper = new WindowInteropHelper(this);
+            UnregisterHotKey(helper.Handle, HOTKEY_ID);
+            _notifyIcon?.Dispose();
+            CoreManager.DisconnectAsync().Wait(3000);
+            Application.Current.Shutdown();
         }
 
         private void LoadSettings()
         {
             _settings = SettingsManager.Load();
-
-            // Apply settings to UI
-            IranDirectCheck.IsChecked = _settings.IranDirectEnabled;
-            SplitTunnelCheck.IsChecked = _settings.SplitTunnelEnabled;
-            SplitTunnelModeBox.SelectedIndex = _settings.SplitTunnelMode == "OnlySelectedApps" ? 1 : 0;
-            SplitTunnelProcessesBox.Text = string.Join(", ", _settings.SplitTunnelProcessNames);
-            SplitTunnelDomainsBox.Text = string.Join(", ", _settings.SplitTunnelCustomDomainsOrIps);
-            KillSwitchCheck.IsChecked = _settings.KillSwitchEnabled;
-            ForceFragmentCheck.IsChecked = _settings.ForceFragmentEnabled;
-            FragmentLengthBox.Text = _settings.FragmentLength;
-            FragmentIntervalBox.Text = _settings.FragmentInterval;
-            AutoConnectCheck.IsChecked = _settings.AutoConnectOnStart;
-            AutoUpdateCheck.IsChecked = _settings.AutoUpdateSubsOnStart;
-            RemoteDnsBox.Text = _settings.CustomRemoteDns;
-            DirectDnsBox.Text = _settings.CustomDirectDns;
-
-            SubscriptionUrlBox.Text = _settings.SubscriptionUrls.FirstOrDefault() ?? "";
         }
 
-        private void LoadConfigs()
+        private void RefreshConfigComboBox()
         {
-            Configs.Clear();
-            foreach (var config in _settings.Configs)
+            ConfigComboBox.ItemsSource = null;
+            ConfigComboBox.ItemsSource = _configs;
+            
+            if (_settings.SelectedConfigId != null)
             {
-                Configs.Add(config);
+                _selectedConfig = _configs.FirstOrDefault(c => c.Id == _settings.SelectedConfigId);
+                ConfigComboBox.SelectedItem = _selectedConfig;
             }
-            ConfigListView.ItemsSource = Configs;
+            else if (_configs.Count > 0)
+            {
+                ConfigComboBox.SelectedIndex = 0;
+            }
         }
 
-        private void AddSubscription_Click(object sender, RoutedEventArgs e)
+        private void ConfigComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var url = SubscriptionUrlBox.Text.Trim();
-            if (string.IsNullOrWhiteSpace(url))
+            if (ConfigComboBox.SelectedItem is VpnConfigItem config)
             {
-                MessageBox.Show("Please enter a subscription URL", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (!_settings.SubscriptionUrls.Contains(url))
-            {
-                _settings.SubscriptionUrls.Add(url);
+                _selectedConfig = config;
+                _settings.SelectedConfigId = config.Id;
                 SettingsManager.Save(_settings);
-                Log($"Added subscription: {url}");
+                UpdateLiveStatus($"کانفیگ انتخاب شد: {config.Name} - پینگ: {(config.LastPingMs >= 0 ? config.LastPingMs + " ms" : "نامشخص")}");
             }
         }
 
-        private async void UpdateSubscriptions_Click(object sender, RoutedEventArgs e)
+        private void BtnAddFromClipboard_Click(object sender, RoutedEventArgs e)
         {
-            Log("Updating subscriptions...");
             try
             {
-                var count = await ConfigParser.FetchAndUpdateSubscriptions(_settings);
-                LoadConfigs();
-                Log($"Updated: {count} configs loaded");
+                var clipboardText = Clipboard.GetText(TextDataFormat.Text);
+                if (string.IsNullOrWhiteSpace(clipboardText))
+                {
+                    UpdateLiveStatus("کلیپ‌بورد خالی است یا حاوی متن نیست");
+                    AudioAndSpeechService.PlayErrorTone();
+                    return;
+                }
+
+                var lines = clipboardText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                var added = 0;
+                var errors = 0;
+
+                foreach (var line in lines)
+                {
+                    var trimmed = line.Trim();
+                    if (string.IsNullOrWhiteSpace(trimmed)) continue;
+
+                    try
+                    {
+                        var config = ConfigParser.ParseUri(trimmed);
+                        if (!_configs.Any(c => c.RawUri == config.RawUri))
+                        {
+                            _configs.Add(config);
+                            _settings.Configs.Add(config);
+                            added++;
+                        }
+                    }
+                    catch
+                    {
+                        errors++;
+                    }
+                }
+
+                if (added > 0)
+                {
+                    SettingsManager.Save(_settings);
+                    RefreshConfigComboBox();
+                    UpdateLiveStatus($"{added} کانفیگ از کلیپ‌بورد اضافه شد");
+                    AudioAndSpeechService.PlayConnectTone();
+                }
+                else if (errors > 0)
+                {
+                    UpdateLiveStatus($"هیچ کانفیگ معتبری یافت نشد ({errors} خطا)");
+                    AudioAndSpeechService.PlayErrorTone();
+                }
+                else
+                {
+                    UpdateLiveStatus("کانفیگ‌ها تکراری بودند و اضافه نشدند");
+                }
             }
             catch (Exception ex)
             {
-                Log($"Update failed: {ex.Message}");
-                MessageBox.Show($"Failed to update subscriptions: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                UpdateLiveStatus($"خطای کلیپ‌بورد: {ex.Message}");
+                AudioAndSpeechService.PlayErrorTone();
             }
         }
 
-        private void Connect_Click(object sender, RoutedEventArgs e)
+        private void BtnOpenSettings_Click(object sender, RoutedEventArgs e)
         {
-            if (ConfigListView.SelectedItem is VpnConfigItem selected)
+            var settingsWindow = new SettingsWindow(_settings);
+            settingsWindow.Owner = this;
+            settingsWindow.SettingsSaved += OnSettingsSaved;
+            settingsWindow.ShowDialog();
+        }
+
+        private void OnSettingsSaved(AppSettings newSettings)
+        {
+            _settings = newSettings;
+            LoadSettings();
+            UpdateLiveStatus("تنظیمات ذخیره شد");
+        }
+
+        private void BtnManageSubscriptions_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new SubscriptionDialog(_settings.SubscriptionUrls);
+            dialog.Owner = this;
+            if (dialog.ShowDialog() == true)
             {
-                _settings.SelectedConfigId = selected.Id;
+                _settings.SubscriptionUrls = dialog.Urls;
                 SettingsManager.Save(_settings);
+                UpdateLiveStatus($"لینک‌های اشتراک به‌روزرسانی شد ({dialog.Urls.Count} لینک)");
+            }
+        }
 
-                // Generate configs
-                var xrayConfig = ConfigParser.GenerateXrayConfigJson(selected, _settings);
-                var singBoxConfig = SingBoxGenerator.GenerateSingBoxConfigJson(_settings);
-
-                // Save to files for external launchers
-                File.WriteAllText(Path.Combine(App.BaseDirectory, "xray-config.json"), xrayConfig);
-                File.WriteAllText(Path.Combine(App.BaseDirectory, "sing-box-config.json"), singBoxConfig);
-
-                Log($"Generated configs for: {selected.Name}");
-                Log($"Xray config saved to xray-config.json");
-                Log($"Sing-box config saved to sing-box-config.json");
-
-                ConnectionStatus.Text = "Config Generated";
-                ConnectionStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 255, 0));
+        private async void BtnConnectDisconnect_Click(object sender, RoutedEventArgs e)
+        {
+            if (CoreManager.IsConnected)
+            {
+                await DisconnectAsync();
             }
             else
             {
-                MessageBox.Show("Please select a configuration first", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        private async void TestPing_Click(object sender, RoutedEventArgs e)
-        {
-            if (ConfigListView.SelectedItem is VpnConfigItem selected)
-            {
-                Log($"Testing ping to {selected.ServerAddress}:{selected.Port}...");
-                // Simple TCP ping
-                try
+                if (_selectedConfig == null)
                 {
-                    using var client = new System.Net.Sockets.TcpClient();
-                    var start = DateTime.UtcNow;
-                    await client.ConnectAsync(selected.ServerAddress, selected.Port);
-                    var ping = (long)(DateTime.UtcNow - start).TotalMilliseconds;
-                    selected.LastPingMs = ping;
-                    ConfigListView.Items.Refresh();
-                    Log($"Ping: {ping} ms");
+                    UpdateLiveStatus("هیچ کانفیگی انتخاب نشده. ابتدا کانفیگ اضافه کنید یا از لیست انتخاب کنید");
+                    AudioAndSpeechService.PlayErrorTone();
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    selected.LastPingMs = -1;
-                    ConfigListView.Items.Refresh();
-                    Log($"Ping failed: {ex.Message}");
-                }
+                await ConnectAsync(_selectedConfig);
             }
         }
 
-        private void RemoveConfig_Click(object sender, RoutedEventArgs e)
+        private async Task ConnectAsync(VpnConfigItem config)
         {
-            if (ConfigListView.SelectedItem is VpnConfigItem selected)
+            if (_isConnecting) return;
+            _isConnecting = true;
+
+            SetConnectingState(true);
+            UpdateLiveStatus($"در حال اتصال به {config.Name}...");
+
+            var success = await CoreManager.ConnectAsync(config, _settings);
+
+            if (success)
             {
-                _settings.Configs.RemoveAll(c => c.Id == selected.Id);
-                Configs.Remove(selected);
-                SettingsManager.Save(_settings);
-                Log($"Removed: {selected.Name}");
+                SetConnectedState(true);
+                UpdateLiveStatus($"متصل شد: {config.Name} | Iran Direct: {(_settings.IranDirectEnabled ? "فعال" : "غیرفعال")} | Split Tunnel: {(_settings.SplitTunnelEnabled ? "فعال" : "غیرفعال")} | Kill Switch: {(_settings.KillSwitchEnabled ? "فعال" : "غیرفعال")}");
+            }
+            else
+            {
+                SetConnectedState(false);
+            }
+
+            _isConnecting = false;
+        }
+
+        private async Task DisconnectAsync()
+        {
+            SetConnectingState(false);
+            UpdateLiveStatus("در حال قطع اتصال...");
+            await CoreManager.DisconnectAsync();
+            SetConnectedState(false);
+            UpdateLiveStatus("قطع اتصال شد");
+        }
+
+        private void SetConnectingState(bool connecting)
+        {
+            if (connecting)
+            {
+                BtnConnectDisconnect.Content = "در حال اتصال...";
+                BtnConnectDisconnect.Background = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x00));
+                BtnConnectDisconnect.BorderBrush = new SolidColorBrush(Colors.Yellow);
+                BtnConnectDisconnect.Tag = "Connecting";
+            }
+            else if (!CoreManager.IsConnected)
+            {
+                SetConnectedState(false);
             }
         }
 
-        private void SaveSettings_Click(object sender, RoutedEventArgs e)
+        private void SetConnectedState(bool connected)
         {
-            _settings.IranDirectEnabled = IranDirectCheck.IsChecked == true;
-            _settings.SplitTunnelEnabled = SplitTunnelCheck.IsChecked == true;
-            _settings.SplitTunnelMode = SplitTunnelModeBox.SelectedIndex == 1 ? "OnlySelectedApps" : "ExcludeApps";
-            _settings.SplitTunnelProcessNames = SplitTunnelProcessesBox.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-            _settings.SplitTunnelCustomDomainsOrIps = SplitTunnelDomainsBox.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-            _settings.KillSwitchEnabled = KillSwitchCheck.IsChecked == true;
-            _settings.ForceFragmentEnabled = ForceFragmentCheck.IsChecked == true;
-            _settings.FragmentLength = FragmentLengthBox.Text;
-            _settings.FragmentInterval = FragmentIntervalBox.Text;
-            _settings.AutoConnectOnStart = AutoConnectCheck.IsChecked == true;
-            _settings.AutoUpdateSubsOnStart = AutoUpdateCheck.IsChecked == true;
-            _settings.CustomRemoteDns = RemoteDnsBox.Text;
-            _settings.CustomDirectDns = DirectDnsBox.Text;
-
-            SettingsManager.Save(_settings);
-            Log("Settings saved");
-            MessageBox.Show("Settings saved successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void ExportSettings_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new SaveFileDialog
+            if (connected)
             {
-                Filter = "JSON Files (*.json)|*.json",
-                FileName = $"ParsGate-Backup-{DateTime.Now:yyyyMMdd-HHmmss}.json"
-            };
-            if (dlg.ShowDialog() == true)
+                BtnConnectDisconnect.Content = "قطع اتصال";
+                BtnConnectDisconnect.Background = new SolidColorBrush(Color.FromRgb(0x55, 0x00, 0x00));
+                BtnConnectDisconnect.BorderBrush = new SolidColorBrush(Colors.Red);
+                BtnConnectDisconnect.Tag = "Connected";
+            }
+            else
             {
-                SettingsManager.ExportBackup(_settings, dlg.FileName);
-                Log($"Settings exported to: {dlg.FileName}");
-                MessageBox.Show("Settings exported successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                BtnConnectDisconnect.Content = "اتصال";
+                BtnConnectDisconnect.Background = new SolidColorBrush(Color.FromRgb(0x00, 0x44, 0x00));
+                BtnConnectDisconnect.BorderBrush = new SolidColorBrush(Color.FromRgb(0x00, 0xFF, 0x00));
+                BtnConnectDisconnect.Tag = "Disconnected";
             }
         }
 
-        private void ImportSettings_Click(object sender, RoutedEventArgs e)
+        private void OnCoreStatusChanged(string status)
         {
-            var dlg = new OpenFileDialog
+            Dispatcher.BeginInvoke(new Action(() =>
             {
-                Filter = "JSON Files (*.json)|*.json"
-            };
-            if (dlg.ShowDialog() == true)
-            {
-                try
-                {
-                    _settings = SettingsManager.ImportBackup(dlg.FileName);
-                    SettingsManager.Save(_settings);
-                    LoadSettings();
-                    LoadConfigs();
-                    Log($"Settings imported from: {dlg.FileName}");
-                    MessageBox.Show("Settings imported successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                catch (Exception ex)
-                {
-                    Log($"Import failed: {ex.Message}");
-                    MessageBox.Show($"Failed to import: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
+                UpdateLiveStatus(status);
+            }));
         }
 
-        private void Log(string message)
+        private async void BtnTestPing_Click(object sender, RoutedEventArgs e)
         {
-            var timestamp = DateTime.Now.ToString("HH:mm:ss");
-            var logEntry = $"[{timestamp}] {message}\n";
-            Dispatcher.Invoke(() =>
+            if (_configs.Count == 0)
             {
-                LogBox.AppendText(logEntry);
-                LogBox.ScrollToEnd();
+                UpdateLiveStatus("هیچ کانفیگی برای تست پینگ وجود ندارد");
+                AudioAndSpeechService.PlayErrorTone();
+                return;
+            }
+
+            UpdateLiveStatus("شروع تست پینگ واقعی برای همه کانفیگ‌ها...");
+            BtnTestPing.IsEnabled = false;
+            BtnTestPing.Content = "در حال تست...";
+
+            var progress = new Progress<string>(msg => 
+            {
+                Dispatcher.BeginInvoke(new Action(() => UpdateLiveStatus(msg)));
             });
+
+            await CoreManager.TestAllRealPingsAsync(_configs.ToList(), _settings, progress);
+            RefreshConfigComboBox();
+            ConfigComboBox.Items.Refresh();
+
+            BtnTestPing.IsEnabled = true;
+            BtnTestPing.Content = "تست پینگ واقعی";
+            UpdateLiveStatus("تست پینگ تمام شد");
+            AudioAndSpeechService.PlayConnectTone();
         }
 
-        public event PropertyChangedEventHandler? PropertyChanged;
-        protected void OnPropertyChanged([CallerMemberName] string? name = null)
+        private void BtnSortByPing_Click(object sender, RoutedEventArgs e)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+            var sorted = _configs
+                .Where(c => c.LastPingMs >= 0)
+                .OrderBy(c => c.LastPingMs)
+                .Concat(_configs.Where(c => c.LastPingMs < 0))
+                .ToList();
+
+            _configs.Clear();
+            foreach (var c in sorted) _configs.Add(c);
+            
+            _settings.Configs = sorted;
+            SettingsManager.Save(_settings);
+            RefreshConfigComboBox();
+            UpdateLiveStatus("کانفیگ‌ها بر اساس بهترین پینگ مرتب شدند");
+        }
+
+        private void BtnCleanupConfigs_Click(object sender, RoutedEventArgs e)
+        {
+            var before = _configs.Count;
+            
+            // Remove duplicates by URI
+            var unique = _configs.GroupBy(c => c.RawUri).Select(g => g.First()).ToList();
+            
+            // Remove failed pings
+            var valid = unique.Where(c => c.LastPingMs >= 0).ToList();
+            
+            _configs.Clear();
+            foreach (var c in valid) _configs.Add(c);
+            
+            _settings.Configs = valid;
+            SettingsManager.Save(_settings);
+            RefreshConfigComboBox();
+            
+            var removed = before - valid.Count;
+            UpdateLiveStatus($"{removed} کانفیگ تکراری یا با پینگ منفی حذف شد. باقی‌مانده: {valid.Count}");
+        }
+
+        private async Task UpdateSubscriptionsAsync()
+        {
+            try
+            {
+                UpdateLiveStatus("بروزرسانی اشتراک‌ها...");
+                var count = await ConfigParser.FetchAndUpdateSubscriptions(_settings);
+                RefreshConfigComboBox();
+                UpdateLiveStatus($"{count} کانفیگ از اشتراک‌ها بارگذاری شد");
+            }
+            catch (Exception ex)
+            {
+                UpdateLiveStatus($"خطای بروزرسانی اشتراک: {ex.Message}");
+            }
+        }
+
+        private void UpdateLiveStatus(string message)
+        {
+            LiveStatusText.Text = message;
+            var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(LiveStatusText);
+            peer?.RaiseAutomationEvent(System.Windows.Automation.AutomationEvents.LiveRegionChanged);
+        }
+
+        public bool IsConnected => CoreManager.IsConnected;
+    }
+
+    // Subscription Dialog
+    public class SubscriptionDialog : Window
+    {
+        public List<string> Urls { get; private set; }
+        private TextBox _textBox;
+
+        public SubscriptionDialog(List<string> currentUrls)
+        {
+            Urls = new List<string>(currentUrls);
+            InitializeComponent();
+        }
+
+        private void InitializeComponent()
+        {
+            Title = "مدیریت لینک‌های اشتراک";
+            Width = 600;
+            Height = 400;
+            Background = new SolidColorBrush(Colors.Black);
+            Foreground = new SolidColorBrush(Colors.White);
+            FontFamily = new FontFamily("pack://application:,,,/Assets/Fonts/#Vazirmatn Bold, Tahoma");
+            FontSize = 18;
+            FlowDirection = FlowDirection.RightToLeft;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            ResizeMode = ResizeMode.NoResize;
+
+            var grid = new Grid { Margin = new Thickness(16) };
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Text = "لینک‌های اشتراک (هر خط یک لینک):",
+                FontSize = 18,
+                Foreground = new SolidColorBrush(Colors.White),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Grid.SetRow(label, 0);
+            grid.Children.Add(label);
+
+            _textBox = new TextBox
+            {
+                Text = string.Join("\n", Urls),
+                Background = new SolidColorBrush(Colors.Black),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderBrush = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(3),
+                FontSize = 16,
+                FontFamily = new FontFamily("Consolas, Tahoma"),
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Padding = new Thickness(8),
+                AcceptsReturn = true
+            };
+            Grid.SetRow(_textBox, 1);
+            grid.Children.Add(_textBox);
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 16, 0, 0)
+            };
+
+            var btnOk = new Button
+            {
+                Content = "ذخیره",
+                Width = 120,
+                Height = 44,
+                Background = new SolidColorBrush(Color.FromRgb(0x00, 0x44, 0x00)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x00, 0xFF, 0x00)),
+                BorderThickness = new Thickness(3),
+                Foreground = new SolidColorBrush(Colors.White),
+                FontSize = 18,
+                FontFamily = new FontFamily("pack://application:,,,/Assets/Fonts/#Vazirmatn Bold, Tahoma")
+            };
+            btnOk.Click += (s, e) =>
+            {
+                Urls = _textBox.Text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(u => u.Trim())
+                    .Where(u => !string.IsNullOrWhiteSpace(u))
+                    .ToList();
+                DialogResult = true;
+                Close();
+            };
+            buttons.Children.Add(btnOk);
+
+            var btnCancel = new Button
+            {
+                Content = "انصراف",
+                Width = 120,
+                Height = 44,
+                Margin = new Thickness(8, 0, 0, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0x55, 0x00, 0x00)),
+                BorderBrush = new SolidColorBrush(Colors.Red),
+                BorderThickness = new Thickness(3),
+                Foreground = new SolidColorBrush(Colors.White),
+                FontSize = 18,
+                FontFamily = new FontFamily("pack://application:,,,/Assets/Fonts/#Vazirmatn Bold, Tahoma")
+            };
+            btnCancel.Click += (s, e) => { DialogResult = false; Close(); };
+            buttons.Children.Add(btnCancel);
+
+            Grid.SetRow(buttons, 2);
+            grid.Children.Add(buttons);
+
+            Content = grid;
         }
     }
 }

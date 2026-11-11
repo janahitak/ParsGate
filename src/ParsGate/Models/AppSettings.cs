@@ -16,6 +16,8 @@ namespace ParsGate.Models
         public string ServerAddress { get; set; } = string.Empty;
         public int Port { get; set; }
         public long LastPingMs { get; set; } = -1;
+
+        public string DisplayText => $"{Name} - پینگ: {(LastPingMs >= 0 ? LastPingMs + " ms" : "نامشخص")}";
     }
 
     public class AppSettings

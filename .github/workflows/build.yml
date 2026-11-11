@@ -1,0 +1,83 @@
+name: Build ParsGate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore src/ParsGate/ParsGate.csproj
+
+      - name: Build
+        run: dotnet build src/ParsGate/ParsGate.csproj --configuration Release --no-restore
+
+      - name: Create release directory
+        run: mkdir release
+
+      - name: Copy binaries
+        run: |
+          copy src\ParsGate\bin\Release\net8.0-windows\ParsGate.exe release\
+          copy src\ParsGate\bin\Release\net8.0-windows\ParsGate.pdb release\
+          copy src\ParsGate\bin\Release\net8.0-windows\ParsGate.dll release\
+          copy src\ParsGate\bin\Release\net8.0-windows\ParsGate.deps.json release\
+
+      - name: Download Xray-core
+        run: |
+          $url = "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "release\Xray-windows-64.zip"
+          Expand-Archive -Path "release\Xray-windows-64.zip" -DestinationPath "release\cores" -Force
+          Move-Item "release\cores\xray.exe" "release\cores\xray.exe" -Force
+          Remove-Item "release\Xray-windows-64.zip"
+
+      - name: Download sing-box
+        run: |
+          $url = "https://github.com/SagerNet/sing-box/releases/latest/download/sing-box-windows-amd64v3.zip"
+          Invoke-WebRequest -Uri $url -OutFile "release\sing-box-windows-amd64v3.zip"
+          Expand-Archive -Path "release\sing-box-windows-amd64v3.zip" -DestinationPath "release\cores" -Force
+          $extractedDir = Get-ChildItem "release\cores" -Directory | Where-Object { $_.Name -like "sing-box*" } | Select-Object -First 1
+          Move-Item "$($extractedDir.FullName)\sing-box.exe" "release\cores\sing-box.exe" -Force
+          Remove-Item "release\sing-box-windows-amd64v3.zip"
+          Remove-Item "$($extractedDir.FullName)" -Recurse -Force
+
+      - name: Download Iran rules
+        run: |
+          mkdir release\rules
+          $geoipUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip-ir.srs"
+          $geositeUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite-ir.srs"
+          Invoke-WebRequest -Uri $geoipUrl -OutFile "release\rules\geoip-ir.srs"
+          Invoke-WebRequest -Uri $geositeUrl -OutFile "release\rules\geosite-ir.srs"
+
+      - name: Create zip package
+        run: |
+          Compress-Archive -Path "release\*" -DestinationPath "release\ParsGate-v0.1.0-windows-x64.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ParsGate-windows-x64
+          path: release/ParsGate-v0.1.0-windows-x64.zip
+          retention-days: 7
+
+      - name: Create Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/ParsGate-v0.1.0-windows-x64.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

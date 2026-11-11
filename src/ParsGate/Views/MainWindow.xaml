@@ -5,243 +5,152 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="ParsGate v0.1"
-        Height="600"
+        Height="650"
         Width="1000"
-        MinHeight="500"
-        MinWidth="800"
-        Style="{StaticResource GlobalWindowStyle}"
+        MinHeight="600"
+        MinWidth="900"
+        Background="#000000"
+        Foreground="#FFFFFF"
+        FontFamily="{StaticResource FontVazirmatn}"
+        FontSize="18"
         FlowDirection="RightToLeft"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Style="{StaticResource GlobalWindowStyle}"
+        KeyDown="Window_KeyDown"
+        Loaded="Window_Loaded"
+        Closing="Window_Closing"
+        StateChanged="Window_StateChanged">
+    
+    <Window.Resources>
+        <Style x:Key="MainButtonStyle" TargetType="Button" BasedOn="{StaticResource GlobalButtonStyle}">
+            <Setter Property="MinHeight" Value="56" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="Padding" Value="24,12" />
+        </Style>
+        
+        <Style x:Key="HugeConnectButtonStyle" TargetType="Button" BasedOn="{StaticResource GlobalButtonStyle}">
+            <Setter Property="Width" Value="320" />
+            <Setter Property="Height" Value="140" />
+            <Setter Property="FontSize" Value="28" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="BorderThickness" Value="4" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+    </Window.Resources>
+
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
-            <TextBlock Text="ParsGate"
-                       FontSize="28"
-                       FontWeight="Bold"
-                       Foreground="#D4AF37"
-                       FontFamily="{StaticResource FontVazirmatn}" />
-            <TextBlock Text=" v0.1"
-                       FontSize="20"
-                       Foreground="#FFFFFF"
-                       FontFamily="{StaticResource FontVazirmatn}"
-                       VerticalAlignment="Center"
-                       Margin="8,0,0,0" />
+        <!-- Top Row: Three Big Accessible Buttons -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
+            <Button x:Name="BtnAddFromClipboard"
+                    Content="افزودن کانفیگ از کلیپ‌بورد"
+                    Style="{StaticResource MainButtonStyle}"
+                    Width="300"
+                    AutomationProperties.Name="افزودن کانفیگ از کلیپ‌بورد"
+                    Click="BtnAddFromClipboard_Click" />
+            
+            <Button x:Name="BtnOpenSettings"
+                    Content="تنظیمات و اسپلیت تونلینگ"
+                    Style="{StaticResource MainButtonStyle}"
+                    Width="300"
+                    Margin="16,0,16,0"
+                    AutomationProperties.Name="تنظیمات و اسپلیت تونلینگ"
+                    Click="BtnOpenSettings_Click" />
+            
+            <Button x:Name="BtnManageSubscriptions"
+                    Content="مدیریت لینک‌های اشتراک"
+                    Style="{StaticResource MainButtonStyle}"
+                    Width="300"
+                    AutomationProperties.Name="مدیریت لینک‌های اشتراک"
+                    Click="BtnManageSubscriptions_Click" />
         </StackPanel>
 
-        <!-- Main Content -->
-        <TabControl Grid.Row="1" Style="{StaticResource GlobalTabControlStyle}">
-            <TabItem Header="Configurations" Style="{StaticResource GlobalTabItemStyle}">
-                <Grid Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+        <!-- Center Section: Huge Connect/Disconnect Button -->
+        <Grid Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Button x:Name="BtnConnectDisconnect"
+                    Content="اتصال"
+                    Style="{StaticResource HugeConnectButtonStyle}"
+                    Background="#004400"
+                    BorderBrush="#00FF00"
+                    Foreground="#FFFFFF"
+                    Tag="Disconnected"
+                    Click="BtnConnectDisconnect_Click"
+                    Focusable="True"
+                    IsDefault="True"
+                    AutomationProperties.Name="دکمه اتصال و قطع اتصال" />
+        </Grid>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBox x:Name="SubscriptionUrlBox"
-                                 Width="400"
-                                 PlaceholderText="Subscription URL"
-                                 Style="{StaticResource GlobalTextBoxStyle}" />
-                        <Button Content="Add Subscription"
-                                Margin="8,0,0,0"
-                                Style="{StaticResource GlobalButtonStyle}"
-                                Click="AddSubscription_Click" />
-                        <Button Content="Update All"
-                                Margin="8,0,0,0"
-                                Style="{StaticResource GlobalButtonStyle}"
-                                Click="UpdateSubscriptions_Click" />
-                    </StackPanel>
+        <!-- Bottom Control Row: Config Selection & Ping Actions -->
+        <Border Grid.Row="2" Background="#0A0A0A" BorderBrush="#FFFFFF" BorderThickness="2" CornerRadius="6" Padding="12" Margin="0,16,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-                    <ListView x:Name="ConfigListView"
-                              Grid.Row="1"
-                              Background="#000000"
-                              Foreground="#FFFFFF"
-                              BorderBrush="#FFFFFF"
-                              BorderThickness="2"
-                              FontFamily="{StaticResource FontVazirmatn}"
-                              FontSize="16"
-                              Margin="0,0,0,8">
-                        <ListView.View>
-                            <GridView>
-                                <GridViewColumn Header="Name" DisplayMemberBinding="{Binding Name}" Width="250" />
-                                <GridViewColumn Header="Protocol" DisplayMemberBinding="{Binding Protocol}" Width="100" />
-                                <GridViewColumn Header="Server" DisplayMemberBinding="{Binding ServerAddress}" Width="200" />
-                                <GridViewColumn Header="Port" DisplayMemberBinding="{Binding Port}" Width="80" />
-                                <GridViewColumn Header="Ping" DisplayMemberBinding="{Binding LastPingMs}" Width="80" />
-                            </GridView>
-                        </ListView.View>
-                    </ListView>
+                <ComboBox x:Name="ConfigComboBox"
+                          Grid.Column="0"
+                          Width="400"
+                          MinHeight="48"
+                          FontSize="18"
+                          FontFamily="{StaticResource FontVazirmatn}"
+                          Background="#000000"
+                          Foreground="#FFFFFF"
+                          BorderBrush="#FFFFFF"
+                          BorderThickness="3"
+                          Padding="8,4"
+                          AutomationProperties.Name="لیست کانفیگ‌ها"
+                          SelectionChanged="ConfigComboBox_SelectionChanged"
+                          DisplayMemberPath="DisplayText" />
 
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Connect Selected"
-                                Style="{StaticResource GlobalButtonStyle}"
-                                Click="Connect_Click"
-                                Tag="Active" />
-                        <Button Content="Test Ping"
-                                Margin="8,0,0,0"
-                                Style="{StaticResource GlobalButtonStyle}"
-                                Click="TestPing_Click" />
-                        <Button Content="Remove"
-                                Margin="8,0,0,0"
-                                Style="{StaticResource GlobalButtonStyle}"
-                                Click="RemoveConfig_Click" />
-                    </StackPanel>
-                </Grid>
-            </TabItem>
+                <Button x:Name="BtnTestPing"
+                        Grid.Column="1"
+                        Content="تست پینگ واقعی"
+                        Style="{StaticResource GlobalButtonStyle}"
+                        Width="160"
+                        Margin="8,0,0,0"
+                        AutomationProperties.Name="تست پینگ واقعی برای همه کانفیگ‌ها"
+                        Click="BtnTestPing_Click" />
 
-            <TabItem Header="Settings" Style="{StaticResource GlobalTabItemStyle}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8">
-                    <StackPanel>
-                        <GroupBox Header="Core Settings" Style="{StaticResource GlobalGroupBoxStyle}" Margin="0,0,0,16">
-                            <StackPanel>
-                                <CheckBox x:Name="IranDirectCheck"
-                                          Content="Iran Direct (Route .ir & geoip-ir directly)"
-                                          Style="{StaticResource GlobalCheckBoxStyle}"
-                                          IsChecked="True"
-                                          Margin="0,8" />
-                                <CheckBox x:Name="SplitTunnelCheck"
-                                          Content="Enable Split Tunneling"
-                                          Style="{StaticResource GlobalCheckBoxStyle}"
-                                          Margin="0,8" />
-                                <StackPanel Orientation="Horizontal" Margin="24,0,0,8">
-                                    <TextBlock Text="Mode:" VerticalAlignment="Center" Foreground="#FFFFFF" FontFamily="{StaticResource FontVazirmatn}" FontSize="16" />
-                                    <ComboBox x:Name="SplitTunnelModeBox"
-                                              Width="200"
-                                              Margin="8,0,0,0"
-                                              Style="{StaticResource GlobalComboBoxStyle}"
-                                              SelectedIndex="0">
-                                        <ComboBoxItem Content="Exclude Selected Apps" Tag="ExcludeApps" />
-                                        <ComboBoxItem Content="Only Selected Apps" Tag="OnlySelectedApps" />
-                                    </ComboBox>
-                                </StackPanel>
-                                <TextBox x:Name="SplitTunnelProcessesBox"
-                                         PlaceholderText="Process names (comma-separated, e.g., chrome.exe,firefox.exe)"
-                                         Style="{StaticResource GlobalTextBoxStyle}"
-                                         Margin="24,0,0,8" />
-                                <TextBox x:Name="SplitTunnelDomainsBox"
-                                         PlaceholderText="Custom domains/IPs (comma-separated)"
-                                         Style="{StaticResource GlobalTextBoxStyle}"
-                                         Margin="24,0,0,8" />
+                <Button x:Name="BtnSortByPing"
+                        Grid.Column="2"
+                        Content="مرتب‌سازی بهترین پینگ"
+                        Style="{StaticResource GlobalButtonStyle}"
+                        Width="180"
+                        Margin="8,0,0,0"
+                        AutomationProperties.Name="مرتب‌سازی کانفیگ‌ها بر اساس بهترین پینگ"
+                        Click="BtnSortByPing_Click" />
 
-                                <CheckBox x:Name="KillSwitchCheck"
-                                          Content="Kill Switch (Block all traffic if tunnel fails)"
-                                          Style="{StaticResource GlobalCheckBoxStyle}"
-                                          Margin="0,8" />
+                <Button x:Name="BtnCleanupConfigs"
+                        Grid.Column="3"
+                        Content="حذف کانفیگ‌های خراب و تکراری"
+                        Style="{StaticResource GlobalButtonStyle}"
+                        Width="200"
+                        Margin="8,0,0,0"
+                        AutomationProperties.Name="حذف کانفیگ‌های تکراری و پینگ منفی"
+                        Click="BtnCleanupConfigs_Click" />
+            </Grid>
+        </Border>
 
-                                <CheckBox x:Name="ForceFragmentCheck"
-                                          Content="Force Fragment (TLS Hello fragmentation)"
-                                          Style="{StaticResource GlobalCheckBoxStyle}"
-                                          Margin="0,8" />
-                                <StackPanel Orientation="Horizontal" Margin="24,0,0,8">
-                                    <TextBlock Text="Length:" VerticalAlignment="Center" Foreground="#FFFFFF" FontFamily="{StaticResource FontVazirmatn}" FontSize="16" />
-                                    <TextBox x:Name="FragmentLengthBox"
-                                             Text="10-20"
-                                             Width="100"
-                                             Style="{StaticResource GlobalTextBoxStyle}"
-                                             Margin="8,0,0,0" />
-                                    <TextBlock Text="Interval:" VerticalAlignment="Center" Foreground="#FFFFFF" FontFamily="{StaticResource FontVazirmatn}" FontSize="16" Margin="16,0,0,0" />
-                                    <TextBox x:Name="FragmentIntervalBox"
-                                             Text="10-20"
-                                             Width="100"
-                                             Style="{StaticResource GlobalTextBoxStyle}"
-                                             Margin="8,0,0,0" />
-                                </StackPanel>
-                            </StackPanel>
-                        </GroupBox>
-
-                        <GroupBox Header="Auto Behavior" Style="{StaticResource GlobalGroupBoxStyle}" Margin="0,0,0,16">
-                            <StackPanel>
-                                <CheckBox x:Name="AutoConnectCheck"
-                                          Content="Auto Connect on Start"
-                                          Style="{StaticResource GlobalCheckBoxStyle}"
-                                          Margin="0,8" />
-                                <CheckBox x:Name="AutoUpdateCheck"
-                                          Content="Auto Update Subscriptions on Start"
-                                          Style="{StaticResource GlobalCheckBoxStyle}"
-                                          IsChecked="True"
-                                          Margin="0,8" />
-                            </StackPanel>
-                        </GroupBox>
-
-                        <GroupBox Header="Custom DNS" Style="{StaticResource GlobalGroupBoxStyle}" Margin="0,0,0,16">
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,8">
-                                    <TextBlock Text="Remote DNS (DoH):" Width="180" VerticalAlignment="Center" Foreground="#FFFFFF" FontFamily="{StaticResource FontVazirmatn}" FontSize="16" />
-                                    <TextBox x:Name="RemoteDnsBox"
-                                             Text="https://1.1.1.1/dns-query"
-                                             Width="400"
-                                             Style="{StaticResource GlobalTextBoxStyle}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,8">
-                                    <TextBlock Text="Direct DNS:" Width="180" VerticalAlignment="Center" Foreground="#FFFFFF" FontFamily="{StaticResource FontVazirmatn}" FontSize="16" />
-                                    <TextBox x:Name="DirectDnsBox"
-                                             Text="1.1.1.1"
-                                             Width="400"
-                                             Style="{StaticResource GlobalTextBoxStyle}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </GroupBox>
-
-                        <GroupBox Header="Backup & Restore" Style="{StaticResource GlobalGroupBoxStyle}" Margin="0,0,0,16">
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="Export Settings"
-                                        Style="{StaticResource GlobalButtonStyle}"
-                                        Click="ExportSettings_Click" />
-                                <Button Content="Import Settings"
-                                        Margin="8,0,0,0"
-                                        Style="{StaticResource GlobalButtonStyle}"
-                                        Click="ImportSettings_Click" />
-                            </StackPanel>
-                        </GroupBox>
-
-                        <Button x:Name="SaveSettingsBtn"
-                                Content="Save Settings"
-                                HorizontalAlignment="Right"
-                                Style="{StaticResource GlobalButtonStyle}"
-                                Tag="Active"
-                                Click="SaveSettings_Click" />
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <TabItem Header="Logs" Style="{StaticResource GlobalTabItemStyle}">
-                <Grid Margin="8">
-                    <TextBox x:Name="LogBox"
-                             IsReadOnly="True"
-                             VerticalScrollBarVisibility="Auto"
-                             Background="#000000"
-                             Foreground="#00FF00"
-                             BorderBrush="#FFFFFF"
-                             BorderThickness="2"
-                             FontFamily="Consolas, Tahoma"
-                             FontSize="14"
-                             Padding="8" />
-                </Grid>
-            </TabItem>
-        </TabControl>
-
-        <!-- Status Bar -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,16,0,0">
-            <TextBlock x:Name="StatusText"
-                       Text="Ready"
-                       VerticalAlignment="Center"
-                       Foreground="#FFFFFF"
-                       FontFamily="{StaticResource FontVazirmatn}"
-                       FontSize="16" />
-            <TextBlock x:Name="ConnectionStatus"
-                       Text="Disconnected"
-                       VerticalAlignment="Center"
-                       Foreground="#FF0000"
-                       FontFamily="{StaticResource FontVazirmatn}"
+        <!-- Footer Live Status Bar -->
+        <Border Grid.Row="3" Background="#000000" BorderBrush="#333333" BorderThickness="0,2,0,0" Padding="8,4" Margin="0,8,0,0">
+            <TextBlock x:Name="LiveStatusText"
+                       Text="ParsGate آماده است. برای اتصال کانفیگ اضافه کنید یا از کلیپ‌بورد وارد کنید."
                        FontSize="16"
-                       Margin="16,0,0,0" />
-        </StackPanel>
+                       FontFamily="{StaticResource FontVazirmatn}"
+                       Foreground="#D4AF37"
+                       AutomationProperties.LiveSetting="Assertive"
+                       AutomationProperties.Name="نوار وضعیت زنده"
+                       TextWrapping="Wrap" />
+        </Border>
     </Grid>
 </Window>

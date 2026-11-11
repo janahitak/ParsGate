@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using ParsGate.Services;
 
 namespace ParsGate
 {
@@ -10,6 +11,9 @@ namespace ParsGate
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // Anti-lockout: remove any leftover kill-switch rules from previous crashes
+            FirewallManager.EnsureAntiLockoutOnStartup();
 
             // Ensure the app uses RTL flow direction globally
             FrameworkElement.FlowDirectionProperty.OverrideMetadata(
