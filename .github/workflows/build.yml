@@ -108,13 +108,17 @@ jobs:
         run: |
           mkdir src\ParsGate\publish\rules -Force
           $baseUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download"
-          $files = @("geoip-ir.srs", "geosite-ir.srs", "geoip.dat", "geosite.dat")
+          # Download v2ray format .dat files (contain Iran categories)
+          $files = @("geoip.dat", "geosite.dat")
           foreach ($file in $files) {
             $url = "$baseUrl/$file"
             $out = "src\ParsGate\publish\rules\$file"
             Write-Host "Downloading $file..."
             Invoke-WebRequest -Uri $url -OutFile $out
           }
+          # Also copy as .srs names for compatibility (sing-box can use v2ray .dat format)
+          Copy-Item "src\ParsGate\publish\rules\geoip.dat" "src\ParsGate\publish\rules\geoip-ir.srs" -Force
+          Copy-Item "src\ParsGate\publish\rules\geosite.dat" "src\ParsGate\publish\rules\geosite-ir.srs" -Force
 
       - name: Verify publish output
         run: |
