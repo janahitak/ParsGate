@@ -134,6 +134,8 @@ jobs:
           echo "=== Checking setup.iss and icon ==="
           ls -la installer/
           ls -la ../src/ParsGate/Assets/
+          echo "=== GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE ==="
+          echo "=== PWD: $(Get-Location) ==="
           echo "=== Running ISCC from installer directory ==="
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) {
@@ -151,6 +153,8 @@ jobs:
 
       - name: Debug file existence
         run: |
+          echo "=== GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE ==="
+          echo "=== PWD: $(Get-Location) ==="
           echo "=== Checking iscc.log ==="
           if (Test-Path "$env:GITHUB_WORKSPACE/iscc.log") {
             ls -la "$env:GITHUB_WORKSPACE/iscc.log"
@@ -168,8 +172,16 @@ jobs:
 
       - name: Verify iscc.log before upload
         run: |
+          echo "=== GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE ==="
+          echo "=== PWD: $(Get-Location) ==="
           ls -la iscc.log 2>$null || echo "iscc.log not found in workspace root"
           ls -la "$env:GITHUB_WORKSPACE/iscc.log" 2>$null || echo "iscc.log not found via GITHUB_WORKSPACE"
+          # Try to copy to ensure it's in workspace root
+          if (Test-Path "$env:GITHUB_WORKSPACE/iscc.log") {
+            Copy-Item "$env:GITHUB_WORKSPACE/iscc.log" "iscc.log" -Force
+            echo "Copied iscc.log to workspace root"
+            ls -la iscc.log
+          }
 
       - name: Upload ISCC log
         if: always()
