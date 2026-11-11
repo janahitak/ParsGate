@@ -87,7 +87,9 @@ namespace ParsGate.Views
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (!_isMinimizedToTray)
+            // Only hide to tray if we've been shown and user is trying to close
+            // Don't hide on initial startup
+            if (IsLoaded && !_isMinimizedToTray)
             {
                 e.Cancel = true;
                 HideToTray();
@@ -96,7 +98,8 @@ namespace ParsGate.Views
 
         private void Window_StateChanged(object sender, EventArgs e)
         {
-            if (WindowState == WindowState.Minimized)
+            // Only minimize to tray if we've been shown and user minimizes
+            if (IsLoaded && WindowState == WindowState.Minimized && !_isMinimizedToTray)
             {
                 HideToTray();
             }
@@ -162,7 +165,7 @@ namespace ParsGate.Views
                 _notifyIcon = new System.Windows.Forms.NotifyIcon
                 {
                     Icon = appIcon,
-                    Text = "ParsGate v0.1",
+                    Text = "ParsGate v0.3",
                     Visible = true
                 };
 

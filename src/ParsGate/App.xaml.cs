@@ -16,48 +16,136 @@ namespace ParsGate
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            // Single-instance check
-            bool createdNew;
-            _singleInstanceMutex = new Mutex(true, MutexName, out createdNew);
-            if (!createdNew)
+            try
             {
-                // Another instance is running - activate it and exit
-                ActivateExistingInstance();
-                Shutdown();
-                return;
-            }
-
-            base.OnStartup(e);
-
-            // Anti-lockout: remove any leftover kill-switch rules from previous crashes
-            FirewallManager.EnsureAntiLockoutOnStartup();
-
-            // Ensure the app uses RTL flow direction globally
-            FrameworkElement.FlowDirectionProperty.OverrideMetadata(
-                typeof(Window),
-                new FrameworkPropertyMetadata(FlowDirection.RightToLeft));
-
-            // Load embedded Vazirmatn font at startup to ensure it's registered
-            LoadEmbeddedFont();
-
-            // Verify we have Administrator privileges (required for TUN and netsh)
-            if (!IsRunningAsAdministrator())
-            {
-                var result = MessageBox.Show(
-                    "ParsGate نیاز به مجوز مدیر (Administrator) دارد برای:\n" +
-                    "• ایجاد اینترفیس TUN (ParsGate-TUN)\n" +
-                    "• مدیریت قوانین فایروال (Kill Switch)\n\n" +
-                    "آیا می‌خواهید با مجوز مدیر مجدداً اجرا شود؟",
-                    "مجوز مدیر لازم است",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-
-                if (result == MessageBoxResult.Yes)
+                // FIRST: Check administrator privileges BEFORE acquiring mutex
+                // If we acquire mutex first then restart as admin, the elevated process
+                // sees the mutex held by the non-elevated process and exits immediately!
+                if (!IsRunningAsAdministrator())
                 {
-                    RestartAsAdministrator();
+                    var result = MessageBox.Show(
+                        "ParsGate نیاز به مجوز مدیر (Administrator) دارد برای:\n" +
+                        "• ایجاد اینترفیس TUN (ParsGate-TUN)\n" +
+                        "• مدیریت قوانین فایروال (Kill Switch)\n\n" +
+                        "آیا می‌خواهید با مجوز مدیر مجدداً اجرا شود؟",
+                        "مجوز مدیر لازم است",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        RestartAsAdministrator();
+                    }
+                    Shutdown();
+                    return;
                 }
-                Shutdown();
-                return;
+
+                // SECOND: Now that we're admin, acquire the single-instance mutex
+                bool createdNew;
+                _singleInstanceMutex = new Mutex(true, MutexName, out createdNew);
+                if (!createdNew)
+                {
+                    ActivateExistingInstance();
+                    Shutdown();
+                    return;
+                }
+
+                base.OnStartup(e);
+
+                // Anti-lockout: remove any leftover kill-switch rules from previous crashes
+                FirewallManager.EnsureAntiLockoutOnStartup();
+
+                // Ensure the app uses RTL flow direction globally
+                FrameworkElement.FlowDirectionProperty.OverrideMetadata(
+                    typeof(Window),
+                    new FrameworkPropertyMetadata(FlowDirection.RightToLeft));
+
+                // Load embedded Vazirmatn font at startup to ensure it's registered
+                LoadEmbeddedFont();
+
+                // Hook global exception handlers BEFORE creating the main window
+                this.DispatcherUnhandledException += OnDispatcherUnhandledException;
+                AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+
+                // Explicitly create and show the main window
+                var mainWin = new Views.MainWindow();
+                this.MainWindow = mainWin;
+                mainWin.WindowState = WindowState.Normal;
+                mainWin.ShowInTaskbar = true;
+                mainWin.Show();
+                mainWin.Activate();
+                mainWin.Focus();
+            }
+            catch (Exception ex)
+            {
+                LogStartupError(ex);
+                ShowErrorAndExit(ex);
+            }
+        }
+
+        private void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+        {
+            LogStartupError(e.Exception);
+            ShowErrorAndExit(e.Exception);
+            e.Handled = true;
+        }
+
+        private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            if (e.ExceptionObject is Exception ex)
+            {
+                LogStartupError(ex);
+                // Can't show MessageBox here reliably, but log is written
+            }
+        }
+
+        private static void LogStartupError(Exception ex)
+        {
+            try
+            {
+                var logPaths = new[]
+                {
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ParsGate", "startup_error.log"),
+                    Path.Combine(Path.GetTempPath(), "ParsGate_startup_error.log")
+                };
+
+                var logContent = $"=== ParsGate Startup Error ===\n" +
+                                 $"Time: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n" +
+                                 $"Exception: {ex.GetType().FullName}\n" +
+                                 $"Message: {ex.Message}\n" +
+                                 $"StackTrace:\n{ex.StackTrace}\n\n";
+
+                foreach (var logPath in logPaths)
+                {
+                    try
+                    {
+                        var dir = Path.GetDirectoryName(logPath);
+                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                            Directory.CreateDirectory(dir);
+                        File.AppendAllText(logPath, logContent);
+                    }
+                    catch { /* ignore individual log failures */ }
+                }
+            }
+            catch { /* logging failure should not crash */ }
+        }
+
+        private static void ShowErrorAndExit(Exception ex)
+        {
+            try
+            {
+                MessageBox.Show(
+                    $"خطای راه‌اندازی ParsGate:\n\n{ex.Message}\n\nجزئیات در فایل لاگ ذخیره شد:\n" +
+                    $"{Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)}\\ParsGate\\startup_error.log\n" +
+                    $"%TEMP%\\ParsGate_startup_error.log",
+                    "خطای راه‌اندازی",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            catch { /* ignore */ }
+            finally
+            {
+                Environment.Exit(1);
             }
         }
 
@@ -78,7 +166,6 @@ namespace ParsGate
                 {
                     if (process.Id != current.Id)
                     {
-                        // Found another instance - try to bring it to foreground
                         var handle = process.MainWindowHandle;
                         if (handle != IntPtr.Zero)
                         {
