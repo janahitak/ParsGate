@@ -129,7 +129,7 @@ jobs:
           Write-Host "=== Rules ==="
           Get-ChildItem "src\ParsGate\publish\rules" -ErrorAction SilentlyContinue | Select-Object FullName, Length
 
-      - name: Compile Inno Setup Installer
+      - name: Compile Inno Setup Installer and verify
         run: |
           echo "=== Checking setup.iss and icon ==="
           ls -la installer/
@@ -143,48 +143,28 @@ jobs:
             exit 1
           }
           Push-Location installer
-          & $iscc setup.iss 2>&1 | Tee-Object -Variable isccOutput | Out-File -FilePath "$env:GITHUB_WORKSPACE/iscc.log" -Encoding utf8
+          & $iscc setup.iss 2>&1 | Tee-Object -Variable isccOutput
           $isccOutput
+          $isccExitCode = $LASTEXITCODE
           Pop-Location
           echo "=== After Pop-Location PWD: $(Get-Location) ==="
-          # Also write to current directory (workspace root)
+          # Write log to workspace root
           $isccOutput | Out-File -FilePath "iscc.log" -Encoding utf8
           echo "=== Wrote iscc.log to workspace root ==="
           ls -la iscc.log
+          echo "=== ISCC Exit Code: $isccExitCode ==="
+          Get-Content iscc.log
           echo "=== Checking for installer output ==="
           ls -la installer/
-          ls -la *.exe 2>$null || echo "No exe in root"
-        continue-on-error: true
-
-      - name: Debug file existence
-        run: |
-          echo "=== GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE ==="
-          echo "=== PWD: $(Get-Location) ==="
-          echo "=== Checking iscc.log ==="
-          if (Test-Path "iscc.log") {
-            ls -la "iscc.log"
-            Get-Content "iscc.log"
-          } elseif (Test-Path "$env:GITHUB_WORKSPACE/iscc.log") {
-            ls -la "$env:GITHUB_WORKSPACE/iscc.log"
-            Get-Content "$env:GITHUB_WORKSPACE/iscc.log"
-          } else {
-            echo "iscc.log not found"
-          }
-          echo "=== Checking installer output ==="
-          if (Test-Path "$env:GITHUB_WORKSPACE/installer/ParsGate-Setup-v0.1.exe") {
-            ls -la "$env:GITHUB_WORKSPACE/installer/ParsGate-Setup-v0.1.exe"
-          } else {
-            echo "installer not found in installer dir"
-          }
+          ls -la installer/ParsGate-Setup-v0.1.exe 2>$null || echo "Installer not found in installer dir"
           Get-ChildItem -Recurse "$env:GITHUB_WORKSPACE" -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
-
-      - name: Verify iscc.log before upload
-        run: |
-          echo "=== Final verification before upload ==="
-          echo "PWD: $(Get-Location)"
-          ls -la iscc.log
-          echo "File size: $(Get-Item iscc.log).Length bytes"
-          Get-Content iscc.log
+          if (-not (Test-Path "installer/ParsGate-Setup-v0.1.exe")) {
+            Write-Error "Installer not found!"
+            exit 1
+          }
+          echo "=== Installer found! ==="
+          ls -la installer/ParsGate-Setup-v0.1.exe
+        continue-on-error: true
 
       - name: Upload ISCC log
         if: always()
@@ -194,12 +174,12 @@ jobs:
           path: iscc.log
           retention-days: 30
 
-      - name: Upload setup.iss for debugging
-        if: always()
+      - name: Upload installer
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: setup-iss
-          path: installer/setup.iss
+          name: ParsGate-Setup-v0.1
+          path: installer/ParsGate-Setup-v0.1.exe
           retention-days: 30
 
       - name: Check ISCC result
