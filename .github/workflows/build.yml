@@ -198,6 +198,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
 
     steps:
       - name: Download installer artifact
