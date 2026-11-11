@@ -193,6 +193,7 @@ jobs:
 
       - name: Create Release v0.1
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
         run: |
           # Get the release ID for tag v0.1
           RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
