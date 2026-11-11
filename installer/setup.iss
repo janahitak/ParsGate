@@ -25,6 +25,7 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64
+SetupIconFile=..\src\ParsGate\Assets\app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]

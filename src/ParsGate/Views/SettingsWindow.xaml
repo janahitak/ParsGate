@@ -16,7 +16,8 @@
         FlowDirection="RightToLeft"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Style="{StaticResource GlobalWindowStyle}">
+        Style="{StaticResource GlobalWindowStyle}"
+        Icon="pack://application:,,,/Assets/app.ico">
     
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
         <StackPanel>

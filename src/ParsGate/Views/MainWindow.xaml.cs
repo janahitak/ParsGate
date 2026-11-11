@@ -144,9 +144,24 @@ namespace ParsGate.Views
         {
             try
             {
+                // Load icon from application resources (app.ico)
+                System.Drawing.Icon appIcon;
+                using (var stream = System.Windows.Application.GetResourceStream(
+                    new Uri("pack://application:,,,/Assets/app.ico"))?.Stream)
+                {
+                    if (stream != null)
+                    {
+                        appIcon = new System.Drawing.Icon(stream);
+                    }
+                    else
+                    {
+                        appIcon = System.Drawing.SystemIcons.Application;
+                    }
+                }
+
                 _notifyIcon = new System.Windows.Forms.NotifyIcon
                 {
-                    Icon = System.Drawing.SystemIcons.Application,
+                    Icon = appIcon,
                     Text = "ParsGate v0.1",
                     Visible = true
                 };

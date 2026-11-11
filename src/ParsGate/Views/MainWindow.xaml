@@ -19,7 +19,8 @@
         KeyDown="Window_KeyDown"
         Loaded="Window_Loaded"
         Closing="Window_Closing"
-        StateChanged="Window_StateChanged">
+        StateChanged="Window_StateChanged"
+        Icon="pack://application:,,,/Assets/app.ico">
     
     <Window.Resources>
         <Style x:Key="MainButtonStyle" TargetType="Button" BasedOn="{StaticResource GlobalButtonStyle}">

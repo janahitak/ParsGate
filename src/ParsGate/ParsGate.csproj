@@ -9,18 +9,20 @@
     <Version>0.1.0</Version>
     <AssemblyName>ParsGate</AssemblyName>
     <RootNamespace>ParsGate</RootNamespace>
-    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>false</SelfContained>
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="Assets\Fonts\Vazirmatn-Bold.ttf" />
+    <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <FrameworkReference Include="System.Windows.Forms" />
   </ItemGroup>
 
 </Project>
