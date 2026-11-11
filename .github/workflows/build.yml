@@ -10,6 +10,9 @@ on:
 permissions:
   contents: write
 
+env:
+  APP_VERSION: "0.2"
+
 jobs:
   build:
     runs-on: windows-latest
@@ -25,7 +28,9 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Verify Vazirmatn Font
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $fontPath = "src\ParsGate\Assets\Fonts\Vazirmatn-Bold.ttf"
           if (-not (Test-Path $fontPath)) {
             Write-Host "Font not found, downloading from official release..."
@@ -33,142 +38,114 @@ jobs:
             Invoke-WebRequest -Uri $url -OutFile "Vazirmatn.zip"
             Expand-Archive -Path "Vazirmatn.zip" -DestinationPath "VazirmatnExtracted" -Force
             $fontFile = Get-ChildItem "VazirmatnExtracted" -Recurse -Filter "Vazirmatn-Bold.ttf" | Select-Object -First 1
-            if ($fontFile) {
-              Copy-Item $fontFile.FullName -Destination $fontPath -Force
-              Write-Host "Downloaded and installed Vazirmatn-Bold.ttf"
-            } else {
-              Write-Error "Vazirmatn-Bold.ttf not found in release archive"
-              exit 1
-            }
+            if (-not $fontFile) { throw "Vazirmatn-Bold.ttf not found in release archive" }
+            New-Item -ItemType Directory -Force -Path (Split-Path $fontPath) | Out-Null
+            Copy-Item $fontFile.FullName -Destination $fontPath -Force
             Remove-Item "Vazirmatn.zip", "VazirmatnExtracted" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Downloaded and installed Vazirmatn-Bold.ttf"
           } else {
             Write-Host "Font already exists at $fontPath"
           }
 
       - name: Restore dependencies
-        run: dotnet restore src/ParsGate/ParsGate.csproj
-
-      - name: Build
-        id: build
+        shell: pwsh
         run: |
-          echo "=== Checking project structure ==="
-          ls -la src/ParsGate/
-          ls -la src/ParsGate/Assets/
-          echo "=== .NET Info ==="
-          dotnet --info
-          echo "=== Building ==="
-          dotnet publish src/ParsGate/ParsGate.csproj --configuration Release --no-restore -o src/ParsGate/publish --verbosity normal 2>&1 | tee build.log
-        continue-on-error: true
+          $ErrorActionPreference = 'Stop'
+          dotnet restore src/ParsGate/ParsGate.csproj
+          if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed with exit code $LASTEXITCODE" }
 
-      - name: Upload build log
+      - name: Publish application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $publishDir = "src\ParsGate\publish"
+          if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
+          dotnet publish src/ParsGate/ParsGate.csproj --configuration Release --no-restore -o $publishDir 2>&1 | Tee-Object -FilePath publish.log
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path "$publishDir\ParsGate.exe")) { throw "ParsGate.exe missing from publish output" }
+          Write-Host "Publish OK"
+
+      - name: Upload publish log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
-          path: build.log
+          name: publish-log
+          path: publish.log
+          if-no-files-found: ignore
           retention-days: 30
 
-      - name: Check build result
-        if: failure()
-        run: |
-          echo "Build failed, see build-log artifact for details"
-          exit 1
-
       - name: Download Xray-core
+        shell: pwsh
         run: |
-          $url = "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip"
-          Invoke-WebRequest -Uri $url -OutFile "Xray-windows-64.zip"
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path "src\ParsGate\publish\cores" | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip" -OutFile "Xray-windows-64.zip"
           Expand-Archive -Path "Xray-windows-64.zip" -DestinationPath "src\ParsGate\publish\cores" -Force
           Remove-Item "Xray-windows-64.zip"
+          if (-not (Test-Path "src\ParsGate\publish\cores\xray.exe")) { throw "xray.exe missing after extraction" }
 
       - name: Download sing-box
+        shell: pwsh
         run: |
-          $api = "https://api.github.com/repos/SagerNet/sing-box/releases/latest"
-          $release = Invoke-RestMethod -Uri $api -Headers @{Accept="application/vnd.github.v3+json"}
+          $ErrorActionPreference = 'Stop'
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/SagerNet/sing-box/releases/latest" -Headers @{ Accept = "application/vnd.github.v3+json" }
           $asset = $release.assets | Where-Object { $_.name -like "sing-box-*-windows-amd64.zip" -and $_.name -notlike "*legacy*" } | Select-Object -First 1
-          if (-not $asset) {
-            Write-Error "Could not find sing-box windows-amd64 asset"
-            exit 1
-          }
-          Write-Host "Downloading $($asset.name)..."
+          if (-not $asset) { throw "Could not find sing-box windows-amd64 asset" }
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "sing-box.zip"
           Expand-Archive -Path "sing-box.zip" -DestinationPath "sing-box-extracted" -Force
           $exe = Get-ChildItem "sing-box-extracted" -Recurse -Filter "sing-box.exe" | Select-Object -First 1
-          if ($exe) {
-            Copy-Item $exe.FullName -Destination "src\ParsGate\publish\cores\sing-box.exe" -Force
-            Write-Host "Copied sing-box.exe"
-          } else {
-            Write-Error "sing-box.exe not found in archive"
-            exit 1
-          }
+          if (-not $exe) { throw "sing-box.exe not found in archive" }
+          Copy-Item $exe.FullName -Destination "src\ParsGate\publish\cores\sing-box.exe" -Force
           Remove-Item "sing-box.zip", "sing-box-extracted" -Recurse -Force
 
-      - name: Download Iran rules (geoip-ir.srs, geosite-ir.srs, geoip.dat, geosite.dat)
+      - name: Download Iran rules
+        shell: pwsh
         run: |
-          mkdir src\ParsGate\publish\rules -Force
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path "src\ParsGate\publish\rules" | Out-Null
           $baseUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download"
-          $files = @("geoip.dat", "geosite.dat")
-          foreach ($file in $files) {
-            $url = "$baseUrl/$file"
-            $out = "src\ParsGate\publish\rules\$file"
-            Write-Host "Downloading $file..."
-            Invoke-WebRequest -Uri $url -OutFile $out
+          foreach ($file in @("geoip.dat", "geosite.dat")) {
+            Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile "src\ParsGate\publish\rules\$file"
           }
           Copy-Item "src\ParsGate\publish\rules\geoip.dat" "src\ParsGate\publish\rules\geoip-ir.srs" -Force
           Copy-Item "src\ParsGate\publish\rules\geosite.dat" "src\ParsGate\publish\rules\geosite-ir.srs" -Force
 
       - name: Verify publish output
+        shell: pwsh
         run: |
-          Write-Host "=== Publish Directory ==="
-          Get-ChildItem "src\ParsGate\publish" -Recurse | Select-Object FullName, Length
-          Write-Host "=== Cores ==="
-          Get-ChildItem "src\ParsGate\publish\cores" -ErrorAction SilentlyContinue | Select-Object FullName, Length
-          Write-Host "=== Rules ==="
-          Get-ChildItem "src\ParsGate\publish\rules" -ErrorAction SilentlyContinue | Select-Object FullName, Length
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem "src\ParsGate\publish" -Recurse -File | Select-Object FullName, Length
+          if (-not (Test-Path "src\ParsGate\publish\ParsGate.exe")) { throw "ParsGate.exe missing" }
+          if (-not (Test-Path "src\ParsGate\publish\cores\xray.exe")) { throw "xray.exe missing" }
+          if (-not (Test-Path "src\ParsGate\publish\cores\sing-box.exe")) { throw "sing-box.exe missing" }
 
-      - name: Compile Inno Setup Installer and verify
+      - name: Compile Inno Setup Installer
+        shell: pwsh
         run: |
-          echo "=== Checking setup.iss and icon ==="
-          ls -la installer/
-          ls -la src/ParsGate/Assets/
-          echo "=== Checking icon file ==="
-          ls -la src/ParsGate/Assets/app.ico
-          echo "=== GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE ==="
-          echo "=== PWD: $(Get-Location) ==="
-          echo "=== Running ISCC from installer directory ==="
+          $ErrorActionPreference = 'Stop'
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            Write-Error "ISCC.exe not found at $iscc"
-            exit 1
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          if (-not (Test-Path "src\ParsGate\Assets\app.ico")) { throw "app.ico missing" }
+
+          $workspace = $env:GITHUB_WORKSPACE
+          $outDir = Join-Path $workspace "installer"
+          $expected = Join-Path $outDir "ParsGate-Setup-v$env:APP_VERSION.exe"
+
+          # setup.iss is relative to installer/, so run ISCC from there.
+          # Output name is pinned by OutputBaseFilename in setup.iss; OutputDir=. resolves to installer/.
+          Push-Location $outDir
+          try {
+            & $iscc "setup.iss" 2>&1 | Tee-Object -FilePath (Join-Path $workspace "iscc.log")
+            $code = $LASTEXITCODE
+          } finally {
+            Pop-Location
           }
-          Push-Location installer
-          & $iscc setup.iss 2>&1 | Tee-Object -Variable isccOutput
-          $isccOutput
-          $isccExitCode = $LASTEXITCODE
-          Pop-Location
-          echo "=== After Pop-Location PWD: $(Get-Location) ==="
-          $isccOutput | Out-File -FilePath "iscc.log" -Encoding utf8
-          echo "=== Wrote iscc.log to workspace root ==="
-          ls -la iscc.log
-          echo "=== ISCC Exit Code: $isccExitCode ==="
-          Get-Content iscc.log
-          if ($isccExitCode -ne 0) {
-            Write-Error "ISCC failed with exit code $isccExitCode"
-            exit 1
+          if ($code -ne 0) { throw "ISCC failed with exit code $code" }
+          if (-not (Test-Path $expected)) {
+            Get-ChildItem -Recurse $workspace -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
+            throw "Installer not produced at $expected"
           }
-          echo "=== Checking for installer output ==="
-          ls -la installer/
-          $installerPath = "$env:GITHUB_WORKSPACE\installer\ParsGate-Setup-v0.1.exe"
-          echo "=== Expected installer path: $installerPath ==="
-          if (Test-Path $installerPath) {
-            echo "=== Installer FOUND at expected path ==="
-            ls -la $installerPath
-          } else {
-            echo "=== Installer NOT found at expected path, searching... ==="
-            Get-ChildItem -Recurse "$env:GITHUB_WORKSPACE" -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
-            Write-Error "Installer not found!"
-            exit 1
-          }
+          Get-Item $expected | Select-Object FullName, Length
 
       - name: Upload ISCC log
         if: always()
@@ -176,28 +153,16 @@ jobs:
         with:
           name: iscc-log
           path: iscc.log
+          if-no-files-found: ignore
           retention-days: 30
 
-      - name: Verify installer file exists
-        if: success()
-        run: |
-          echo "=== Verifying installer file before upload ==="
-          ls -la installer/ParsGate-Setup-v0.1.exe
-        shell: pwsh
-
       - name: Upload installer artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pars-gate-installer
-          path: installer/ParsGate-Setup-v0.1.exe
+          path: installer/ParsGate-Setup-v0.2.exe
+          if-no-files-found: error
           retention-days: 30
-
-      - name: Check ISCC result
-        if: failure()
-        run: |
-          echo "ISCC failed, see iscc-log artifact for details"
-          exit 1
 
   release:
     needs: build
@@ -213,19 +178,42 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: pars-gate-installer
-          path: .
+          path: dist
 
-      - name: Create release v0.1.2 with installer
+      - name: Create release v0.2 with installer asset
         shell: pwsh
-        run: |
-          $installerPath = "installer/ParsGate-Setup-v0.1.exe"
-          Write-Host "=== Checking installer file ==="
-          ls $installerPath
-          Write-Host "=== Checking gh CLI ==="
-          gh --version
-          Write-Host "=== Creating release v0.1.2 with asset via gh CLI ==="
-          $notes = "## ParsGate v0.1.2 - Initial Release with Installer`n`nWindows VPN/circumvention tool with:`n- Xray-core (SOCKS5) + sing-box (TUN) core engines`n- Iran Direct routing (geoip-ir, geosite-ir)`n- Split Tunneling (process/domain/IP based)`n- Kill Switch with anti-lockout`n- NVDA-accessible high-contrast UI (RTL, Persian)`n- Silent elevated execution via Task Scheduler"
-          gh release create v0.1.2 $installerPath --title "ParsGate v0.1.2" --notes $notes --latest
-          Write-Host "Release created and asset uploaded successfully"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installerPath = "dist\ParsGate-Setup-v0.2.exe"
+          if (-not (Test-Path $installerPath)) {
+            Get-ChildItem -Recurse dist | Select-Object FullName, Length
+            throw "Installer artifact missing after download"
+          }
+          Get-Item $installerPath | Select-Object FullName, Length
+
+          $notesLines = @(
+            "## ParsGate v0.2",
+            "",
+            "Windows VPN / circumvention client with:",
+            "",
+            "- Xray-core (SOCKS5) + sing-box (TUN) engines",
+            "- Iran direct routing (geoip-ir, geosite-ir)",
+            "- Split tunneling (process / domain / IP based)",
+            "- Kill switch with anti-lockout",
+            "- NVDA-accessible high-contrast RTL Persian UI",
+            "- Silent elevated launch via Task Scheduler"
+          )
+          Set-Content -Path "notes.md" -Value $notesLines -Encoding UTF8
+
+          # Remove any stale v0.2 release (and its tag) so the new one is brand new.
+          gh release view v0.2 *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete v0.2 --yes --cleanup-tag
+            if ($LASTEXITCODE -ne 0) { throw "failed to delete existing v0.2 release" }
+          }
+
+          gh release create v0.2 $installerPath --title "ParsGate v0.2" --notes-file notes.md --latest
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
+          Write-Host "Release v0.2 published with installer asset"
