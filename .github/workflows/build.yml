@@ -200,10 +200,9 @@ jobs:
           ls $installerPath
           Write-Host "=== Checking gh CLI ==="
           gh --version
-          Write-Host "=== Creating/updating release v0.1.1 ==="
-          gh release delete v0.1.1 --yes 2>$null || $true
-          $notes = "## ParsGate v0.1.1 - Initial Release with Installer`n`nWindows VPN/circumvention tool with:`n- Xray-core (SOCKS5) + sing-box (TUN) core engines`n- Iran Direct routing (geoip-ir, geosite-ir)`n- Split Tunneling (process/domain/IP based)`n- Kill Switch with anti-lockout`n- NVDA-accessible high-contrast UI (RTL, Persian)`n- Silent elevated execution via Task Scheduler"
-          gh release create v0.1.1 $installerPath --title "ParsGate v0.1.1" --notes $notes --latest
-          Write-Host "Release created and asset uploaded successfully"
+          Write-Host "=== Uploading asset to release v0.1.1 ==="
+          # Upload to existing release (created in previous run)
+          gh release upload v0.1.1 $installerPath --clobber
+          Write-Host "Asset uploaded successfully"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
