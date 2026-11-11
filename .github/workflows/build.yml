@@ -194,19 +194,25 @@ jobs:
       - name: Create Release v0.1
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          # Delete existing release if it exists, then create new one
-          gh release delete v0.1 --yes 2>/dev/null || true
-          gh release create v0.1 "${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe" \
-            --title "ParsGate v0.1" \
-            --notes "## ParsGate v0.1 - Initial Release
-            
-            Windows VPN/circumvention tool with:
-            - Xray-core (SOCKS5) + sing-box (TUN) core engines
-            - Iran Direct routing (geoip-ir, geosite-ir)
-            - Split Tunneling (process/domain/IP based)
-            - Kill Switch with anti-lockout
-            - NVDA-accessible high-contrast UI (RTL, Persian)
-            - Silent elevated execution via Task Scheduler" \
-            --latest
+          # Get the release ID for tag v0.1
+          RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/janahitak/ParsGate/releases/tags/v0.1 | jq -r '.id')
+          if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
+            echo "Release not found, creating new one..."
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/janahitak/ParsGate/releases \
+              -d '{"tag_name":"v0.1","name":"ParsGate v0.1","body":"## ParsGate v0.1 - Initial Release\n\nWindows VPN/circumvention tool with:\n- Xray-core (SOCKS5) + sing-box (TUN) core engines\n- Iran Direct routing (geoip-ir, geosite-ir)\n- Split Tunneling (process/domain/IP based)\n- Kill Switch with anti-lockout\n- NVDA-accessible high-contrast UI (RTL, Persian)\n- Silent elevated execution via Task Scheduler","draft":false,"prerelease":false,"make_latest":"true"}'
+            RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              https://api.github.com/repos/janahitak/ParsGate/releases/tags/v0.1 | jq -r '.id')
+          fi
+          echo "Release ID: $RELEASE_ID"
+          # Upload the installer asset
+          UPLOAD_URL="https://uploads.github.com/repos/janahitak/ParsGate/releases/$RELEASE_ID/assets?name=ParsGate-Setup-v0.1.exe"
+          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe" \
+            "$UPLOAD_URL"
+          echo "Asset uploaded successfully"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
