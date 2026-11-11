@@ -131,12 +131,31 @@ jobs:
 
       - name: Compile Inno Setup Installer
         run: |
+          echo "=== Checking setup.iss and icon ==="
+          ls -la installer/
+          ls -la ../src/ParsGate/Assets/
+          echo "=== Running ISCC ==="
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) {
             Write-Error "ISCC.exe not found at $iscc"
             exit 1
           }
-          & $iscc installer\setup.iss
+          & $iscc installer\setup.iss 2>&1 | tee iscc.log
+        continue-on-error: true
+
+      - name: Upload ISCC log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iscc-log
+          path: iscc.log
+          retention-days: 30
+
+      - name: Check ISCC result
+        if: failure()
+        run: |
+          echo "ISCC failed, see iscc-log artifact for details"
+          exit 1
 
       - name: Verify installer output
         run: |
