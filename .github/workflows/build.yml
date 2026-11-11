@@ -130,9 +130,9 @@ jobs:
         run: |
           echo "=== Checking setup.iss and icon ==="
           ls -la installer/
-          ls -la ../src/ParsGate/Assets/
+          ls -la src/ParsGate/Assets/
           echo "=== Checking icon file ==="
-          ls -la ../src/ParsGate/Assets/app.ico
+          ls -la src/ParsGate/Assets/app.ico
           echo "=== GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE ==="
           echo "=== PWD: $(Get-Location) ==="
           echo "=== Running ISCC from installer directory ==="
