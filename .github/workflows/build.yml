@@ -198,11 +198,15 @@ jobs:
           $installerPath = "${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe"
           Write-Host "=== Checking installer file ==="
           ls $installerPath
-          Write-Host "=== Checking gh CLI ==="
-          gh --version
-          Write-Host "=== Uploading asset to release v0.1.1 ==="
-          # Upload to existing release (created in previous run)
-          gh release upload v0.1.1 $installerPath --clobber
-          Write-Host "Asset uploaded successfully"
+          Write-Host "=== Uploading asset to release v0.1.1 via GitHub API ==="
+          $releaseId = 441230116
+          $uploadUrl = "https://uploads.github.com/repos/janahitak/ParsGate/releases/$releaseId/assets?name=ParsGate-Setup-v0.1.exe"
+          $headers = @{
+            "Authorization" = "token ${{ secrets.GITHUB_TOKEN }}"
+            "Content-Type" = "application/octet-stream"
+          }
+          $fileBytes = [System.IO.File]::ReadAllBytes($installerPath)
+          $response = Invoke-RestMethod -Uri $uploadUrl -Method Post -Headers $headers -Body $fileBytes
+          Write-Host "Asset uploaded successfully: $($response.browser_download_url)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
