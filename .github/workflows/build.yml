@@ -83,14 +83,26 @@ jobs:
 
       - name: Download sing-box
         run: |
-          $url = "https://github.com/SagerNet/sing-box/releases/latest/download/sing-box-windows-amd64v3.zip"
-          Invoke-WebRequest -Uri $url -OutFile "sing-box-windows-amd64v3.zip"
-          Expand-Archive -Path "sing-box-windows-amd64v3.zip" -DestinationPath "sing-box-extracted" -Force
+          # Get latest sing-box release asset for windows-amd64
+          $api = "https://api.github.com/repos/SagerNet/sing-box/releases/latest"
+          $release = Invoke-RestMethod -Uri $api -Headers @{Accept="application/vnd.github.v3+json"}
+          $asset = $release.assets | Where-Object { $_.name -like "sing-box-*-windows-amd64.zip" -and $_.name -notlike "*legacy*" } | Select-Object -First 1
+          if (-not $asset) {
+            Write-Error "Could not find sing-box windows-amd64 asset"
+            exit 1
+          }
+          Write-Host "Downloading $($asset.name)..."
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "sing-box.zip"
+          Expand-Archive -Path "sing-box.zip" -DestinationPath "sing-box-extracted" -Force
           $exe = Get-ChildItem "sing-box-extracted" -Recurse -Filter "sing-box.exe" | Select-Object -First 1
           if ($exe) {
             Copy-Item $exe.FullName -Destination "src\ParsGate\publish\cores\sing-box.exe" -Force
+            Write-Host "Copied sing-box.exe"
+          } else {
+            Write-Error "sing-box.exe not found in archive"
+            exit 1
           }
-          Remove-Item "sing-box-windows-amd64v3.zip", "sing-box-extracted" -Recurse -Force
+          Remove-Item "sing-box.zip", "sing-box-extracted" -Recurse -Force
 
       - name: Download Iran rules (geoip-ir.srs, geosite-ir.srs, geoip.dat, geosite.dat)
         run: |
