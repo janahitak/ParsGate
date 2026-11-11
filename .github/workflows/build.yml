@@ -179,7 +179,7 @@ jobs:
           echo "ISCC failed, see iscc-log artifact for details"
           exit 1
 
-      - name: Upload installer to release v0.1.1
+      - name: Create release v0.1.2 with installer
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
@@ -187,15 +187,11 @@ jobs:
           INSTALLER_PATH="${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe"
           echo "=== Checking installer file ==="
           ls -la "$INSTALLER_PATH"
-          echo "=== Uploading asset to release v0.1.1 via GitHub API ==="
-          RELEASE_ID=441230116
-          UPLOAD_URL="https://uploads.github.com/repos/janahitak/ParsGate/releases/$RELEASE_ID/assets?name=ParsGate-Setup-v0.1.exe"
-          echo "Upload URL: $UPLOAD_URL"
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @"$INSTALLER_PATH" \
-            "$UPLOAD_URL"
-          echo "Asset uploaded successfully"
+          echo "=== Creating release v0.1.2 with asset via gh CLI ==="
+          gh release create v0.1.2 "$INSTALLER_PATH" \
+            --title "ParsGate v0.1.2" \
+            --notes $'## ParsGate v0.1.2 - Initial Release with Installer\n\nWindows VPN/circumvention tool with:\n- Xray-core (SOCKS5) + sing-box (TUN) core engines\n- Iran Direct routing (geoip-ir, geosite-ir)\n- Split Tunneling (process/domain/IP based)\n- Kill Switch with anti-lockout\n- NVDA-accessible high-contrast UI (RTL, Persian)\n- Silent elevated execution via Task Scheduler' \
+            --latest
+          echo "Release created and asset uploaded successfully"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
