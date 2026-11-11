@@ -41,9 +41,10 @@ Name: "launchafterinstall"; Description: "اجرا فوراً پس از نصب";
 Source: "..\src\ParsGate\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "schtasks.exe"; Parameters: "/run /tn \"\"ParsGateElevatedTask\"\""; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "اجرای ParsGate با مجوز مدیر (بدون UAC)"
+; Start Menu shortcut - runs the elevated task
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "اجرای ParsGate با مجوز مدیر (بدون UAC)"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{commondesktop}\{#MyAppName}"; Filename: "schtasks.exe"; Parameters: "/run /tn \"\"ParsGateElevatedTask\"\""; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "اجرای ParsGate با مجوز مدیر (بدون UAC)"; Tasks: desktopicon
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "اجرای ParsGate با مجوز مدیر (بدون UAC)"; Tasks: desktopicon
 
 [Run]
 ; Register the elevated scheduled task - /it ensures interactive session (not Session 0)
