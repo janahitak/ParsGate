@@ -102,7 +102,7 @@ namespace ParsGate.Views
             }
         }
 
-        private void Window_KeyDown(object sender, KeyEventArgs e)
+        private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             if (e.Key == Key.Space && Keyboard.FocusedElement == BtnConnectDisconnect)
             {
@@ -502,7 +502,7 @@ namespace ParsGate.Views
         {
             LiveStatusText.Text = message;
             var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(LiveStatusText);
-            peer?.RaiseAutomationEvent(System.Windows.Automation.AutomationEvents.LiveRegionChanged);
+            peer?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
         }
 
         public bool IsConnected => CoreManager.IsConnected;
@@ -512,7 +512,7 @@ namespace ParsGate.Views
     public class SubscriptionDialog : Window
     {
         public List<string> Urls { get; private set; }
-        private TextBox _textBox;
+        private System.Windows.Controls.TextBox _textBox;
 
         public SubscriptionDialog(List<string> currentUrls)
         {

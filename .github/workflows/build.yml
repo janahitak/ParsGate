@@ -164,6 +164,39 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Dump CI log to ci-log branch
+        if: always()
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Single collected log: every earlier step's log file plus this run's status.
+          $log = "build_error.log"
+          if (Test-Path $log) { Remove-Item $log -Force }
+          @(
+            "=== ParsGate CI log ===",
+            "commit: ${{ github.sha }}",
+            "run:    ${{ github.run_id }}",
+            "job status: ${{ job.status }}",
+            ""
+          ) | Out-File -FilePath $log -Encoding utf8
+
+          foreach ($f in @("publish.log", "iscc.log")) {
+            if (Test-Path $f) {
+              "" | Out-File -FilePath $log -Append -Encoding utf8
+              "=== $f ===" | Out-File -FilePath $log -Append -Encoding utf8
+              Get-Content $f -Raw | Out-File -FilePath $log -Append -Encoding utf8
+            }
+          }
+
+          git config user.name "ci"
+          git config user.email "ci@local"
+          git checkout -B ci-log
+          git add -f $log
+          git commit -m "ci log ${{ github.run_id }}" --allow-empty
+          git push -f origin ci-log
+        continue-on-error: true
+
   release:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

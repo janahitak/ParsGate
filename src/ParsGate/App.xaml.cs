@@ -9,7 +9,7 @@ using ParsGate.Services;
 
 namespace ParsGate
 {
-    public partial class App : Application
+    public partial class App : System.Windows.Application
     {
         private static Mutex? _singleInstanceMutex;
         private const string MutexName = "Global\\ParsGate_SingleInstance_Mutex";

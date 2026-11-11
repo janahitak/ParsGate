@@ -130,7 +130,7 @@ namespace ParsGate.Services
                         ["type"] = "domain_suffix",
                         ["domain_suffix"] = new JsonArray("geosite-ir")
                     }
-                ],
+                },
                 ["server"] = "direct-dns"
             });
 
@@ -168,7 +168,7 @@ namespace ParsGate.Services
                             ["type"] = "domain_suffix",
                             ["domain_suffix"] = new JsonArray(".ir")
                         }
-                    ],
+                    },
                     ["outbound"] = "direct"
                 });
             }

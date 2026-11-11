@@ -162,7 +162,7 @@
                     <StackPanel Orientation="Horizontal" Margin="24,0,0,8">
                         <TextBlock Text="دامنه/IP سفارشی:" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="16" Width="180" />
                         <TextBox x:Name="CustomDomainIpBox"
-                                 PlaceholderText="example.com یا 1.2.3.4/24"
+                                 Tag="example.com یا 1.2.3.4/24"
                                  Width="350"
                                  Style="{StaticResource GlobalTextBoxStyle}"
                                  Margin="8,0,0,0"

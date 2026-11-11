@@ -35,7 +35,6 @@
             <Setter Property="FontSize" Value="28" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="BorderThickness" Value="4" />
-            <Setter Property="CornerRadius" Value="8" />
         </Style>
     </Window.Resources>
 
