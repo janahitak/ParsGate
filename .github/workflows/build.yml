@@ -166,12 +166,17 @@ jobs:
           }
           Get-ChildItem -Recurse "$env:GITHUB_WORKSPACE" -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
 
+      - name: Verify iscc.log before upload
+        run: |
+          ls -la iscc.log 2>$null || echo "iscc.log not found in workspace root"
+          ls -la "$env:GITHUB_WORKSPACE/iscc.log" 2>$null || echo "iscc.log not found via GITHUB_WORKSPACE"
+
       - name: Upload ISCC log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: iscc-log
-          path: ${{ github.workspace }}/iscc.log
+          path: iscc.log
           retention-days: 30
 
       - name: Upload setup.iss for debugging
@@ -179,7 +184,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: setup-iss
-          path: ${{ github.workspace }}/installer/setup.iss
+          path: installer/setup.iss
           retention-days: 30
 
       - name: Check ISCC result
