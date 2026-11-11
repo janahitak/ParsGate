@@ -185,6 +185,13 @@ jobs:
           path: ${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe
           retention-days: 30
 
+      - name: Download installer artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/download-artifact@v4
+        with:
+          name: ParsGate-Setup-v0.1
+          path: installer/
+
       - name: Check ISCC result
         if: failure()
         run: |
@@ -207,7 +214,7 @@ jobs:
             - Kill Switch with anti-lockout
             - NVDA-accessible high-contrast UI (RTL, Persian)
             - Silent elevated execution via Task Scheduler
-          files: ${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe
+          files: installer/ParsGate-Setup-v0.1.exe
           generate_release_notes: false
           make_latest: true
           prerelease: false
