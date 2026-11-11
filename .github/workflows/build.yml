@@ -185,21 +185,28 @@ jobs:
           path: installer/ParsGate-Setup-v0.1.exe
           retention-days: 30
 
-      - name: Download installer artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/download-artifact@v4
-        with:
-          name: ParsGate-Setup-v0.1
-          path: installer/
-
       - name: Check ISCC result
         if: failure()
         run: |
           echo "ISCC failed, see iscc-log artifact for details"
           exit 1
 
-      - name: Create Release v0.1
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ParsGate-Setup-v0.1
+          path: installer/
+
+      - name: Create Release v0.1.1
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.1.1
