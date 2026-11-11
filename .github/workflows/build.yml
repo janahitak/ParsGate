@@ -156,14 +156,17 @@ jobs:
           Get-Content iscc.log
           echo "=== Checking for installer output ==="
           ls -la installer/
-          ls -la installer/ParsGate-Setup-v0.1.exe 2>$null || echo "Installer not found in installer dir"
-          Get-ChildItem -Recurse "$env:GITHUB_WORKSPACE" -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
-          if (-not (Test-Path "installer/ParsGate-Setup-v0.1.exe")) {
+          $installerPath = "$env:GITHUB_WORKSPACE\installer\ParsGate-Setup-v0.1.exe"
+          echo "=== Expected installer path: $installerPath ==="
+          if (Test-Path $installerPath) {
+            echo "=== Installer FOUND at expected path ==="
+            ls -la $installerPath
+          } else {
+            echo "=== Installer NOT found at expected path, searching... ==="
+            Get-ChildItem -Recurse "$env:GITHUB_WORKSPACE" -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
             Write-Error "Installer not found!"
             exit 1
           }
-          echo "=== Installer found! ==="
-          ls -la installer/ParsGate-Setup-v0.1.exe
         continue-on-error: true
 
       - name: Upload ISCC log
@@ -179,7 +182,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ParsGate-Setup-v0.1
-          path: installer/ParsGate-Setup-v0.1.exe
+          path: ${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe
           retention-days: 30
 
       - name: Check ISCC result
@@ -204,7 +207,7 @@ jobs:
             - Kill Switch with anti-lockout
             - NVDA-accessible high-contrast UI (RTL, Persian)
             - Silent elevated execution via Task Scheduler
-          files: installer/ParsGate-Setup-v0.1.exe
+          files: ${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe
           generate_release_notes: false
           make_latest: true
           prerelease: false
