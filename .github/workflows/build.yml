@@ -131,6 +131,8 @@ jobs:
           echo "=== Checking setup.iss and icon ==="
           ls -la installer/
           ls -la ../src/ParsGate/Assets/
+          echo "=== Checking icon file ==="
+          ls -la ../src/ParsGate/Assets/app.ico
           echo "=== GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE ==="
           echo "=== PWD: $(Get-Location) ==="
           echo "=== Running ISCC from installer directory ==="
@@ -150,6 +152,10 @@ jobs:
           ls -la iscc.log
           echo "=== ISCC Exit Code: $isccExitCode ==="
           Get-Content iscc.log
+          if ($isccExitCode -ne 0) {
+            Write-Error "ISCC failed with exit code $isccExitCode"
+            exit 1
+          }
           echo "=== Checking for installer output ==="
           ls -la installer/
           $installerPath = "$env:GITHUB_WORKSPACE\installer\ParsGate-Setup-v0.1.exe"
