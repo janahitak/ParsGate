@@ -144,7 +144,18 @@ jobs:
           & $iscc setup.iss 2>&1 | Out-File -FilePath ../iscc.log -Encoding utf8
           Get-Content ../iscc.log
           Pop-Location
+          echo "=== Checking for installer output ==="
+          ls -la installer/
+          ls -la *.exe 2>$null || echo "No exe in root"
         continue-on-error: true
+
+      - name: Debug file existence
+        run: |
+          echo "=== Checking iscc.log ==="
+          ls -la iscc.log 2>$null || echo "iscc.log not found"
+          echo "=== Checking installer output ==="
+          ls -la installer/ParsGate-Setup-v0.1.exe 2>$null || echo "installer not found in installer dir"
+          Get-ChildItem -Recurse -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
 
       - name: Upload ISCC log
         if: always()
