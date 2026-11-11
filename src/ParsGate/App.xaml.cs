@@ -55,11 +55,6 @@ namespace ParsGate
                 // Anti-lockout: remove any leftover kill-switch rules from previous crashes
                 FirewallManager.EnsureAntiLockoutOnStartup();
 
-                // Ensure the app uses RTL flow direction globally
-                FrameworkElement.FlowDirectionProperty.OverrideMetadata(
-                    typeof(Window),
-                    new FrameworkPropertyMetadata(FlowDirection.RightToLeft));
-
                 // Load embedded Vazirmatn font at startup to ensure it's registered
                 LoadEmbeddedFont();
 

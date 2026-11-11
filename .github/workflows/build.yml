@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 env:
-  APP_VERSION: "0.4"
+  APP_VERSION: "0.5"
 
 jobs:
   build:
@@ -160,7 +160,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pars-gate-installer
-          path: installer/ParsGate-Setup-v0.4.exe
+          path: installer/ParsGate-Setup-v0.5.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -216,14 +216,14 @@ jobs:
           name: pars-gate-installer
           path: dist
 
-      - name: Create release v0.4 with installer asset
+      - name: Create release v0.5 with installer asset
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $installerPath = "dist\ParsGate-Setup-v0.4.exe"
+          $installerPath = "dist\ParsGate-Setup-v0.5.exe"
           if (-not (Test-Path $installerPath)) {
             Get-ChildItem -Recurse dist | Select-Object FullName, Length
             throw "Installer artifact missing after download"
@@ -231,7 +231,7 @@ jobs:
           Get-Item $installerPath | Select-Object FullName, Length
 
           $notesLines = @(
-            "## ParsGate v0.4",
+            "## ParsGate v0.5",
             "",
             "Windows VPN / circumvention client with:",
             "",
@@ -242,20 +242,21 @@ jobs:
             "- NVDA-accessible high-contrast RTL Persian UI",
             "- Silent elevated launch via Task Scheduler",
             "- Standard Windows UAC manifest (requireAdministrator)",
-            "- Fixed win-x64 runtime targeting for reliable WPF startup"
+            "- Fixed win-x64 runtime targeting for reliable WPF startup",
+            "- Removed OverrideMetadata causing Window static init crash"
           )
           Set-Content -Path "notes.md" -Value $notesLines -Encoding UTF8
 
-          # Remove any stale v0.4 release (and its tag) so the new one is brand new.
-          gh release view v0.4 *> $null
+          # Remove any stale v0.5 release (and its tag) so the new one is brand new.
+          gh release view v0.5 *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release delete v0.4 --yes --cleanup-tag
-            if ($LASTEXITCODE -ne 0) { throw "failed to delete existing v0.4 release" }
+            gh release delete v0.5 --yes --cleanup-tag
+            if ($LASTEXITCODE -ne 0) { throw "failed to delete existing v0.5 release" }
           }
 
-          gh release create v0.4 $installerPath --title "ParsGate v0.4" --notes-file notes.md --latest
+          gh release create v0.5 $installerPath --title "ParsGate v0.5" --notes-file notes.md --latest
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
-          Write-Host "Release v0.4 published with installer asset"
+          Write-Host "Release v0.5 published with installer asset"
 
       - name: Dump release log to ci-log branch
         if: always()
@@ -272,7 +273,7 @@ jobs:
             ""
           ) | Out-File -FilePath $log -Encoding utf8
           gh release list --limit 5 *>> $log
-          gh release view v0.4 --json tagName,assets *>> $log
+          gh release view v0.5 --json tagName,assets *>> $log
           $env:GIT_REDIRECT_STDERR = '2>&1'
           git config user.name "ci"
           git config user.email "ci@local"

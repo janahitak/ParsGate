@@ -177,7 +177,7 @@ namespace ParsGate.Views
                 _notifyIcon = new System.Windows.Forms.NotifyIcon
                 {
                     Icon = appIcon,
-                    Text = "ParsGate v0.3",
+                    Text = "ParsGate v0.5",
                     Visible = true
                 };
 

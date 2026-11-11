@@ -1,9 +1,9 @@
 ; ParsGate Inno Setup Script
 ; Build: iscc.exe setup.iss
-; Output: ParsGate-Setup-v0.4.exe
+; Output: ParsGate-Setup-v0.5.exe
 
 #define MyAppName "ParsGate"
-#define MyAppVersion "0.4"
+#define MyAppVersion "0.5"
 #define MyAppPublisher "ParsGate Team"
 #define MyAppURL "https://github.com/janahitak/ParsGate"
 #define MyAppExeName "ParsGate.exe"
@@ -19,7 +19,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=no
 OutputDir=.
-OutputBaseFilename=ParsGate-Setup-v0.4
+OutputBaseFilename=ParsGate-Setup-v0.5
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
