@@ -57,7 +57,7 @@ jobs:
           echo "=== .NET Info ==="
           dotnet --info
           echo "=== Building ==="
-          dotnet build src/ParsGate/ParsGate.csproj --configuration Release --no-restore --verbosity detailed 2>&1 | tee build.log
+          dotnet publish src/ParsGate/ParsGate.csproj --configuration Release --no-restore -o src/ParsGate/publish --verbosity normal 2>&1 | tee build.log
         continue-on-error: true
 
       - name: Upload build log
