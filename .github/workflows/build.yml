@@ -5,11 +5,15 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -20,64 +24,121 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Verify Vazirmatn Font
+        run: |
+          $fontPath = "src\ParsGate\Assets\Fonts\Vazirmatn-Bold.ttf"
+          if (-not (Test-Path $fontPath)) {
+            Write-Host "Font not found, downloading from official release..."
+            $url = "https://github.com/rastikerdar/vazirmatn/releases/download/v33.003/Vazirmatn-Font-v33.003.zip"
+            Invoke-WebRequest -Uri $url -OutFile "Vazirmatn.zip"
+            Expand-Archive -Path "Vazirmatn.zip" -DestinationPath "VazirmatnExtracted" -Force
+            $fontFile = Get-ChildItem "VazirmatnExtracted" -Recurse -Filter "Vazirmatn-Bold.ttf" | Select-Object -First 1
+            if ($fontFile) {
+              Copy-Item $fontFile.FullName -Destination $fontPath -Force
+              Write-Host "Downloaded and installed Vazirmatn-Bold.ttf"
+            } else {
+              Write-Error "Vazirmatn-Bold.ttf not found in release archive"
+              exit 1
+            }
+            Remove-Item "Vazirmatn.zip", "VazirmatnExtracted" -Recurse -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "Font already exists at $fontPath"
+          }
+
       - name: Restore dependencies
         run: dotnet restore src/ParsGate/ParsGate.csproj
 
       - name: Build
         run: dotnet build src/ParsGate/ParsGate.csproj --configuration Release --no-restore
 
-      - name: Create release directory
-        run: mkdir release
-
-      - name: Copy binaries
-        run: |
-          copy src\ParsGate\bin\Release\net8.0-windows\ParsGate.exe release\
-          copy src\ParsGate\bin\Release\net8.0-windows\ParsGate.pdb release\
-          copy src\ParsGate\bin\Release\net8.0-windows\ParsGate.dll release\
-          copy src\ParsGate\bin\Release\net8.0-windows\ParsGate.deps.json release\
+      - name: Publish self-contained
+        run: dotnet publish src/ParsGate/ParsGate.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o src/ParsGate/publish
 
       - name: Download Xray-core
         run: |
           $url = "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip"
-          Invoke-WebRequest -Uri $url -OutFile "release\Xray-windows-64.zip"
-          Expand-Archive -Path "release\Xray-windows-64.zip" -DestinationPath "release\cores" -Force
-          Move-Item "release\cores\xray.exe" "release\cores\xray.exe" -Force
-          Remove-Item "release\Xray-windows-64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "Xray-windows-64.zip"
+          Expand-Archive -Path "Xray-windows-64.zip" -DestinationPath "src\ParsGate\publish\cores" -Force
+          Remove-Item "Xray-windows-64.zip"
 
       - name: Download sing-box
         run: |
           $url = "https://github.com/SagerNet/sing-box/releases/latest/download/sing-box-windows-amd64v3.zip"
-          Invoke-WebRequest -Uri $url -OutFile "release\sing-box-windows-amd64v3.zip"
-          Expand-Archive -Path "release\sing-box-windows-amd64v3.zip" -DestinationPath "release\cores" -Force
-          $extractedDir = Get-ChildItem "release\cores" -Directory | Where-Object { $_.Name -like "sing-box*" } | Select-Object -First 1
-          Move-Item "$($extractedDir.FullName)\sing-box.exe" "release\cores\sing-box.exe" -Force
-          Remove-Item "release\sing-box-windows-amd64v3.zip"
-          Remove-Item "$($extractedDir.FullName)" -Recurse -Force
+          Invoke-WebRequest -Uri $url -OutFile "sing-box-windows-amd64v3.zip"
+          Expand-Archive -Path "sing-box-windows-amd64v3.zip" -DestinationPath "sing-box-extracted" -Force
+          $exe = Get-ChildItem "sing-box-extracted" -Recurse -Filter "sing-box.exe" | Select-Object -First 1
+          if ($exe) {
+            Copy-Item $exe.FullName -Destination "src\ParsGate\publish\cores\sing-box.exe" -Force
+          }
+          Remove-Item "sing-box-windows-amd64v3.zip", "sing-box-extracted" -Recurse -Force
 
-      - name: Download Iran rules
+      - name: Download Iran rules (geoip-ir.srs, geosite-ir.srs, geoip.dat, geosite.dat)
         run: |
-          mkdir release\rules
-          $geoipUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip-ir.srs"
-          $geositeUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite-ir.srs"
-          Invoke-WebRequest -Uri $geoipUrl -OutFile "release\rules\geoip-ir.srs"
-          Invoke-WebRequest -Uri $geositeUrl -OutFile "release\rules\geosite-ir.srs"
+          mkdir src\ParsGate\publish\rules -Force
+          $baseUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download"
+          $files = @("geoip-ir.srs", "geosite-ir.srs", "geoip.dat", "geosite.dat")
+          foreach ($file in $files) {
+            $url = "$baseUrl/$file"
+            $out = "src\ParsGate\publish\rules\$file"
+            Write-Host "Downloading $file..."
+            Invoke-WebRequest -Uri $url -OutFile $out
+          }
 
-      - name: Create zip package
+      - name: Verify publish output
         run: |
-          Compress-Archive -Path "release\*" -DestinationPath "release\ParsGate-v0.1.0-windows-x64.zip" -Force
+          Write-Host "=== Publish Directory ==="
+          Get-ChildItem "src\ParsGate\publish" -Recurse | Select-Object FullName, Length
+          Write-Host "=== Cores ==="
+          Get-ChildItem "src\ParsGate\publish\cores" -ErrorAction SilentlyContinue | Select-Object FullName, Length
+          Write-Host "=== Rules ==="
+          Get-ChildItem "src\ParsGate\publish\rules" -ErrorAction SilentlyContinue | Select-Object FullName, Length
 
-      - name: Upload artifact
+      - name: Compile Inno Setup Installer
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Error "ISCC.exe not found at $iscc"
+            exit 1
+          }
+          & $iscc installer\setup.iss
+
+      - name: Verify installer output
+        run: |
+          $installer = "ParsGate-Setup-v0.1.exe"
+          if (Test-Path $installer) {
+            Write-Host "Installer created: $installer"
+            $size = (Get-Item $installer).Length
+            Write-Host "Size: $($size / 1MB) MB"
+          } else {
+            Write-Error "Installer not found!"
+            exit 1
+          }
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ParsGate-windows-x64
-          path: release/ParsGate-v0.1.0-windows-x64.zip
-          retention-days: 7
+          name: ParsGate-Setup-v0.1
+          path: ParsGate-Setup-v0.1.exe
+          retention-days: 30
 
-      - name: Create Release
+      - name: Create Release v0.1
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: release/ParsGate-v0.1.0-windows-x64.zip
-          generate_release_notes: true
+          tag_name: v0.1
+          name: ParsGate v0.1
+          body: |
+            ## ParsGate v0.1 - Initial Release
+            
+            Windows VPN/circumvention tool with:
+            - Xray-core (SOCKS5) + sing-box (TUN) core engines
+            - Iran Direct routing (geoip-ir, geosite-ir)
+            - Split Tunneling (process/domain/IP based)
+            - Kill Switch with anti-lockout
+            - NVDA-accessible high-contrast UI (RTL, Persian)
+            - Silent elevated execution via Task Scheduler
+          files: ParsGate-Setup-v0.1.exe
+          generate_release_notes: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
