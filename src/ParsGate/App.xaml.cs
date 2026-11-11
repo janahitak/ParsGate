@@ -134,10 +134,17 @@ namespace ParsGate
         {
             try
             {
+                var msg = $"خطای راه‌اندازی ParsGate:\n\n{ex.Message}";
+                if (ex.InnerException != null)
+                {
+                    msg += $"\n\nInner Exception: {ex.InnerException.Message}";
+                }
+                msg += $"\n\nجزئیات در فایل لاگ ذخیره شد:\n" +
+                       $"{Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)}\\ParsGate\\startup_error.log\n" +
+                       $"%TEMP%\\ParsGate_startup_error.log";
+                
                 MessageBox.Show(
-                    $"خطای راه‌اندازی ParsGate:\n\n{ex.Message}\n\nجزئیات در فایل لاگ ذخیره شد:\n" +
-                    $"{Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)}\\ParsGate\\startup_error.log\n" +
-                    $"%TEMP%\\ParsGate_startup_error.log",
+                    msg,
                     "خطای راه‌اندازی",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);

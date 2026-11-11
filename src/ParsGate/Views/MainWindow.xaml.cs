@@ -46,6 +46,18 @@ namespace ParsGate.Views
         public MainWindow()
         {
             InitializeComponent();
+            
+            // Load window icon safely with fallback (prevents static resource crash)
+            try
+            {
+                var iconStream = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app.ico"))?.Stream;
+                if (iconStream != null)
+                {
+                    this.Icon = System.Windows.Media.Imaging.BitmapFrame.Create(iconStream);
+                }
+            }
+            catch { /* fallback to default icon */ }
+
             DataContext = this;
             LoadSettings();
             RefreshConfigComboBox();

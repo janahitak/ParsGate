@@ -4,23 +4,21 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="ParsGate v0.3"
+        Title="ParsGate v0.4"
         Height="650"
         Width="1000"
         MinHeight="600"
         MinWidth="900"
         Background="#000000"
         Foreground="#FFFFFF"
-        FontFamily="{StaticResource FontVazirmatn}"
+        FontFamily="Vazirmatn, Tahoma, Segoe UI"
         FontSize="18"
         FlowDirection="RightToLeft"
         WindowStartupLocation="CenterScreen"
-        Style="{StaticResource GlobalWindowStyle}"
         KeyDown="Window_KeyDown"
         Loaded="Window_Loaded"
         Closing="Window_Closing"
-        StateChanged="Window_StateChanged"
-        Icon="pack://application:,,,/Assets/app.ico">
+        StateChanged="Window_StateChanged">
     
     <Window.Resources>
         <Style x:Key="MainButtonStyle" TargetType="Button" BasedOn="{StaticResource GlobalButtonStyle}">
