@@ -134,14 +134,16 @@ jobs:
           echo "=== Checking setup.iss and icon ==="
           ls -la installer/
           ls -la ../src/ParsGate/Assets/
-          echo "=== Running ISCC ==="
+          echo "=== Running ISCC from installer directory ==="
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) {
             Write-Error "ISCC.exe not found at $iscc"
             exit 1
           }
-          & $iscc installer\setup.iss 2>&1 | Out-File -FilePath iscc.log -Encoding utf8
-          Get-Content iscc.log
+          Push-Location installer
+          & $iscc setup.iss 2>&1 | Out-File -FilePath ../iscc.log -Encoding utf8
+          Get-Content ../iscc.log
+          Pop-Location
         continue-on-error: true
 
       - name: Upload ISCC log
