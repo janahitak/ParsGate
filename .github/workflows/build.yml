@@ -195,9 +195,15 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          # Get the release ID for tag v0.1
+          set -euo pipefail
+          echo "=== Checking installer file ==="
+          ls -la "${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe"
+          echo "=== Checking jq availability ==="
+          which jq || (echo "jq not found, installing..." && apt-get update && apt-get install -y jq)
+          echo "=== Getting release ID ==="
           RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/janahitak/ParsGate/releases/tags/v0.1 | jq -r '.id')
+          echo "Release ID: $RELEASE_ID"
           if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
             echo "Release not found, creating new one..."
             curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -206,10 +212,11 @@ jobs:
               -d '{"tag_name":"v0.1","name":"ParsGate v0.1","body":"## ParsGate v0.1 - Initial Release\n\nWindows VPN/circumvention tool with:\n- Xray-core (SOCKS5) + sing-box (TUN) core engines\n- Iran Direct routing (geoip-ir, geosite-ir)\n- Split Tunneling (process/domain/IP based)\n- Kill Switch with anti-lockout\n- NVDA-accessible high-contrast UI (RTL, Persian)\n- Silent elevated execution via Task Scheduler","draft":false,"prerelease":false,"make_latest":"true"}'
             RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               https://api.github.com/repos/janahitak/ParsGate/releases/tags/v0.1 | jq -r '.id')
+            echo "New Release ID: $RELEASE_ID"
           fi
-          echo "Release ID: $RELEASE_ID"
-          # Upload the installer asset
+          echo "=== Uploading asset ==="
           UPLOAD_URL="https://uploads.github.com/repos/janahitak/ParsGate/releases/$RELEASE_ID/assets?name=ParsGate-Setup-v0.1.exe"
+          echo "Upload URL: $UPLOAD_URL"
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/octet-stream" \
             --data-binary @"${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe" \
