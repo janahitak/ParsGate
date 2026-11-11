@@ -152,9 +152,18 @@ jobs:
       - name: Debug file existence
         run: |
           echo "=== Checking iscc.log ==="
-          ls -la "$env:GITHUB_WORKSPACE/iscc.log" 2>$null || echo "iscc.log not found"
+          if (Test-Path "$env:GITHUB_WORKSPACE/iscc.log") {
+            ls -la "$env:GITHUB_WORKSPACE/iscc.log"
+            Get-Content "$env:GITHUB_WORKSPACE/iscc.log"
+          } else {
+            echo "iscc.log not found at $env:GITHUB_WORKSPACE/iscc.log"
+          }
           echo "=== Checking installer output ==="
-          ls -la "$env:GITHUB_WORKSPACE/installer/ParsGate-Setup-v0.1.exe" 2>$null || echo "installer not found in installer dir"
+          if (Test-Path "$env:GITHUB_WORKSPACE/installer/ParsGate-Setup-v0.1.exe") {
+            ls -la "$env:GITHUB_WORKSPACE/installer/ParsGate-Setup-v0.1.exe"
+          } else {
+            echo "installer not found in installer dir"
+          }
           Get-ChildItem -Recurse "$env:GITHUB_WORKSPACE" -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
 
       - name: Upload ISCC log
@@ -163,6 +172,14 @@ jobs:
         with:
           name: iscc-log
           path: ${{ github.workspace }}/iscc.log
+          retention-days: 30
+
+      - name: Upload setup.iss for debugging
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup-iss
+          path: ${{ github.workspace }}/installer/setup.iss
           retention-days: 30
 
       - name: Check ISCC result
