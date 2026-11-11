@@ -207,6 +207,9 @@ jobs:
       actions: read
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download installer artifact
         uses: actions/download-artifact@v4
         with:
@@ -217,6 +220,7 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           $ErrorActionPreference = 'Stop'
           $installerPath = "dist\ParsGate-Setup-v0.2.exe"
@@ -250,3 +254,28 @@ jobs:
           gh release create v0.2 $installerPath --title "ParsGate v0.2" --notes-file notes.md --latest
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
           Write-Host "Release v0.2 published with installer asset"
+
+      - name: Dump release log to ci-log branch
+        if: always()
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $log = "release_error.log"
+          @(
+            "=== ParsGate release job ===",
+            "commit: ${{ github.sha }}",
+            "run:    ${{ github.run_id }}",
+            "status: ${{ job.status }}",
+            ""
+          ) | Out-File -FilePath $log -Encoding utf8
+          gh release list --limit 5 *>> $log
+          gh release view v0.2 --json tagName,assets *>> $log
+          $env:GIT_REDIRECT_STDERR = '2>&1'
+          git config user.name "ci"
+          git config user.email "ci@local"
+          git checkout -B ci-log
+          git add -f $log
+          git commit -m "release log ${{ github.run_id }}" --allow-empty
+          git push -f origin ci-log
+        continue-on-error: true
