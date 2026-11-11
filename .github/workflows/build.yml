@@ -163,7 +163,6 @@ jobs:
             Write-Error "Installer not found!"
             exit 1
           }
-        continue-on-error: true
 
       - name: Upload ISCC log
         if: always()
