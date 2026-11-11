@@ -201,7 +201,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: pars-gate-installer
-          path: installer/
+          path: .
 
       - name: Create Release v0.1.1
         uses: softprops/action-gh-release@v2
