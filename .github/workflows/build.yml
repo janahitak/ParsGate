@@ -140,7 +140,8 @@ jobs:
             Write-Error "ISCC.exe not found at $iscc"
             exit 1
           }
-          & $iscc installer\setup.iss 2>&1 | tee iscc.log
+          & $iscc installer\setup.iss 2>&1 | Out-File -FilePath iscc.log -Encoding utf8
+          Get-Content iscc.log
         continue-on-error: true
 
       - name: Upload ISCC log
@@ -159,13 +160,15 @@ jobs:
 
       - name: Verify installer output
         run: |
-          $installer = "ParsGate-Setup-v0.1.exe"
+          $installer = "installer\ParsGate-Setup-v0.1.exe"
           if (Test-Path $installer) {
             Write-Host "Installer created: $installer"
             $size = (Get-Item $installer).Length
             Write-Host "Size: $($size / 1MB) MB"
           } else {
-            Write-Error "Installer not found!"
+            Write-Error "Installer not found at $installer!"
+            # Search for it
+            Get-ChildItem -Recurse -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
             exit 1
           }
 
