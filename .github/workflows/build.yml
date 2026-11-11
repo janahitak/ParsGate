@@ -49,7 +49,7 @@ jobs:
         run: dotnet restore src/ParsGate/ParsGate.csproj
 
       - name: Build
-        run: dotnet build src/ParsGate/ParsGate.csproj --configuration Release --no-restore
+        run: dotnet build src/ParsGate/ParsGate.csproj --configuration Release --no-restore --verbosity detailed
 
       - name: Publish self-contained
         run: dotnet publish src/ParsGate/ParsGate.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o src/ParsGate/publish
