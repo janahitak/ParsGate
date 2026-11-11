@@ -173,31 +173,47 @@ jobs:
           path: iscc.log
           retention-days: 30
 
+      - name: Upload installer artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pars-gate-installer
+          path: installer/ParsGate-Setup-v0.1.exe
+          retention-days: 30
+
       - name: Check ISCC result
         if: failure()
         run: |
           echo "ISCC failed, see iscc-log artifact for details"
           exit 1
 
-      - name: Create release v0.1.2 with installer
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
         with:
-          tag_name: v0.1.2
-          name: ParsGate v0.1.2
-          body: |
-            ## ParsGate v0.1.2 - Initial Release with Installer
-            
-            Windows VPN/circumvention tool with:
-            - Xray-core (SOCKS5) + sing-box (TUN) core engines
-            - Iran Direct routing (geoip-ir, geosite-ir)
-            - Split Tunneling (process/domain/IP based)
-            - Kill Switch with anti-lockout
-            - NVDA-accessible high-contrast UI (RTL, Persian)
-            - Silent elevated execution via Task Scheduler
-          files: installer/ParsGate-Setup-v0.1.exe
-          generate_release_notes: false
-          make_latest: true
-          prerelease: false
+          name: pars-gate-installer
+          path: .
+
+      - name: Create release v0.1.2 with installer
+        shell: pwsh
+        run: |
+          $installerPath = "ParsGate-Setup-v0.1.exe"
+          Write-Host "=== Checking installer file ==="
+          ls $installerPath
+          Write-Host "=== Checking gh CLI ==="
+          gh --version
+          Write-Host "=== Creating release v0.1.2 with asset via gh CLI ==="
+          $notes = "## ParsGate v0.1.2 - Initial Release with Installer`n`nWindows VPN/circumvention tool with:`n- Xray-core (SOCKS5) + sing-box (TUN) core engines`n- Iran Direct routing (geoip-ir, geosite-ir)`n- Split Tunneling (process/domain/IP based)`n- Kill Switch with anti-lockout`n- NVDA-accessible high-contrast UI (RTL, Persian)`n- Silent elevated execution via Task Scheduler"
+          gh release create v0.1.2 $installerPath --title "ParsGate v0.1.2" --notes $notes --latest
+          Write-Host "Release created and asset uploaded successfully"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
