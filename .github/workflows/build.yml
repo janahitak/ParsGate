@@ -206,7 +206,7 @@ jobs:
       - name: Create release v0.1.2 with installer
         shell: pwsh
         run: |
-          $installerPath = "ParsGate-Setup-v0.1.exe"
+          $installerPath = "installer/ParsGate-Setup-v0.1.exe"
           Write-Host "=== Checking installer file ==="
           ls $installerPath
           Write-Host "=== Checking gh CLI ==="
