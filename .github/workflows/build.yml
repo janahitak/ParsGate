@@ -188,29 +188,8 @@ jobs:
           echo "ISCC failed, see iscc-log artifact for details"
           exit 1
 
-      - name: Verify installer output
-        run: |
-          $installer = "installer\ParsGate-Setup-v0.1.exe"
-          if (Test-Path $installer) {
-            Write-Host "Installer created: $installer"
-            $size = (Get-Item $installer).Length
-            Write-Host "Size: $($size / 1MB) MB"
-          } else {
-            Write-Error "Installer not found at $installer!"
-            # Search for it
-            Get-ChildItem -Recurse -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
-            exit 1
-          }
-
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ParsGate-Setup-v0.1
-          path: ParsGate-Setup-v0.1.exe
-          retention-days: 30
-
       - name: Create Release v0.1
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.1
@@ -225,8 +204,9 @@ jobs:
             - Kill Switch with anti-lockout
             - NVDA-accessible high-contrast UI (RTL, Persian)
             - Silent elevated execution via Task Scheduler
-          files: ParsGate-Setup-v0.1.exe
+          files: installer/ParsGate-Setup-v0.1.exe
           generate_release_notes: false
+          make_latest: true
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
