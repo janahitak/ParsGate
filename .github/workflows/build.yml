@@ -178,6 +178,14 @@ jobs:
           }
           Get-ChildItem -Recurse "$env:GITHUB_WORKSPACE" -Filter "ParsGate-Setup*.exe" | Select-Object FullName, Length
 
+      - name: Verify iscc.log before upload
+        run: |
+          echo "=== Final verification before upload ==="
+          echo "PWD: $(Get-Location)"
+          ls -la iscc.log
+          echo "File size: $(Get-Item iscc.log).Length bytes"
+          Get-Content iscc.log
+
       - name: Upload ISCC log
         if: always()
         uses: actions/upload-artifact@v4
