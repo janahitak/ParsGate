@@ -181,7 +181,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: ParsGate-Setup-v0.1
+          name: installer
           path: installer/ParsGate-Setup-v0.1.exe
           retention-days: 30
 
@@ -203,7 +203,7 @@ jobs:
       - name: Download installer artifact
         uses: actions/download-artifact@v4
         with:
-          name: ParsGate-Setup-v0.1
+          name: installer
           path: installer/
 
       - name: Create Release v0.1.1
