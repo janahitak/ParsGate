@@ -193,12 +193,12 @@ jobs:
 
       - name: Create Release v0.1
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v0.1
-          name: ParsGate v0.1
-          body: |
-            ## ParsGate v0.1 - Initial Release
+        run: |
+          # Delete existing release if it exists, then create new one
+          gh release delete v0.1 --yes 2>/dev/null || true
+          gh release create v0.1 "${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe" \
+            --title "ParsGate v0.1" \
+            --notes "## ParsGate v0.1 - Initial Release
             
             Windows VPN/circumvention tool with:
             - Xray-core (SOCKS5) + sing-box (TUN) core engines
@@ -206,10 +206,7 @@ jobs:
             - Split Tunneling (process/domain/IP based)
             - Kill Switch with anti-lockout
             - NVDA-accessible high-contrast UI (RTL, Persian)
-            - Silent elevated execution via Task Scheduler
-          files: ${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe
-          generate_release_notes: false
-          make_latest: true
-          prerelease: false
+            - Silent elevated execution via Task Scheduler" \
+            --latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
