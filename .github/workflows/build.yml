@@ -193,34 +193,15 @@ jobs:
 
       - name: Create Release v0.1
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          echo "=== Checking installer file ==="
-          ls -la "${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe"
-          echo "=== Checking jq availability ==="
-          which jq || (echo "jq not found, installing..." && apt-get update && apt-get install -y jq)
-          echo "=== Getting release ID ==="
-          RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/janahitak/ParsGate/releases/tags/v0.1 | jq -r '.id')
-          echo "Release ID: $RELEASE_ID"
-          if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
-            echo "Release not found, creating new one..."
-            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              https://api.github.com/repos/janahitak/ParsGate/releases \
-              -d '{"tag_name":"v0.1","name":"ParsGate v0.1","body":"## ParsGate v0.1 - Initial Release\n\nWindows VPN/circumvention tool with:\n- Xray-core (SOCKS5) + sing-box (TUN) core engines\n- Iran Direct routing (geoip-ir, geosite-ir)\n- Split Tunneling (process/domain/IP based)\n- Kill Switch with anti-lockout\n- NVDA-accessible high-contrast UI (RTL, Persian)\n- Silent elevated execution via Task Scheduler","draft":false,"prerelease":false,"make_latest":"true"}'
-            RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              https://api.github.com/repos/janahitak/ParsGate/releases/tags/v0.1 | jq -r '.id')
-            echo "New Release ID: $RELEASE_ID"
-          fi
-          echo "=== Uploading asset ==="
-          UPLOAD_URL="https://uploads.github.com/repos/janahitak/ParsGate/releases/$RELEASE_ID/assets?name=ParsGate-Setup-v0.1.exe"
-          echo "Upload URL: $UPLOAD_URL"
-          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @"${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe" \
-            "$UPLOAD_URL"
-          echo "Asset uploaded successfully"
+          $installerPath = "${{ github.workspace }}/installer/ParsGate-Setup-v0.1.exe"
+          Write-Host "=== Checking installer file ==="
+          ls $installerPath
+          Write-Host "=== Checking gh CLI ==="
+          gh --version
+          Write-Host "=== Uploading asset to release v0.1 ==="
+          gh release upload v0.1 $installerPath --clobber
+          Write-Host "Asset uploaded successfully"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
