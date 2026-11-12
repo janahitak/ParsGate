@@ -1,0 +1,11 @@
+=== ParsGate release job ===
+commit: 6cd1a602bbd75994fa5fdba46271966292d7ce09
+run:    43133408809
+status: success
+
+ParsGate v0.6	Latest	v0.6	2026-11-12T01:19:16Z
+ParsGate v0.5		v0.5	2026-11-11T23:46:30Z
+ParsGate v0.4		v0.4	2026-11-11T23:05:05Z
+ParsGate v0.3		v0.3	2026-11-11T22:29:02Z
+ParsGate v0.2		v0.2	2026-11-11T18:20:08Z
+{"assets":[{"apiUrl":"https://api.github.com/repos/janahitak/ParsGate/releases/assets/737568252","contentType":"application/x-msdownload","createdAt":"2026-11-12T01:19:14Z","digest":"sha256:d3f02b270c117877640f6aa9b8b4f876cdf9984545feb8521381c541d90e42b9","downloadCount":0,"id":"RA_kwDOVocgGc4r9mX8","label":"","name":"ParsGate-Setup-v0.6.exe","size":38621467,"state":"uploaded","updatedAt":"2026-11-12T01:19:15Z","url":"https://github.com/janahitak/ParsGate/releases/download/v0.6/ParsGate-Setup-v0.6.exe"}],"tagName":"v0.6"}
