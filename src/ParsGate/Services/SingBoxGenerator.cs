@@ -29,10 +29,10 @@ namespace ParsGate.Services
                         ["inet4_address"] = "172.19.0.1/30",
                         ["auto_route"] = true,
                         ["strict_route"] = true,
-                        ["stack"] = "system",
+                        ["stack"] = "mixed",
                         ["sniff"] = true,
                         ["sniff_override_destination"] = true,
-                        ["mtu"] = 9000
+                        ["mtu"] = 1400
                     }
                 },
                 ["outbounds"] = new JsonArray(),
@@ -143,6 +143,28 @@ namespace ParsGate.Services
             // Routing Rules
             var route = config["route"] as JsonObject;
             var rules = route!["rules"] as JsonArray;
+
+            // Rule 0: Block QUIC (UDP 443) to force Chrome/Edge to fall back to TCP/HTTP2 over Xray SOCKS5
+            rules!.Add(new JsonObject
+            {
+                ["type"] = "logical",
+                ["mode"] = "or",
+                ["rules"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["type"] = "protocol",
+                        ["protocol"] = new JsonArray("quic")
+                    },
+                    new JsonObject
+                    {
+                        ["type"] = "port",
+                        ["port"] = 443,
+                        ["network"] = "udp"
+                    }
+                },
+                ["outbound"] = "block"
+            });
 
             // Rule 1: Iran Direct (geoip-ir, geosite-ir) -> direct
             if (settings.IranDirectEnabled)

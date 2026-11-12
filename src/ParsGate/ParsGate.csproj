@@ -8,7 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
     <AssemblyName>ParsGate</AssemblyName>
     <RootNamespace>ParsGate</RootNamespace>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>

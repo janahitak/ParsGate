@@ -1,9 +1,9 @@
 ; ParsGate Inno Setup Script
 ; Build: iscc.exe setup.iss
-; Output: ParsGate-Setup-v0.5.exe
+; Output: ParsGate-Setup-v0.6.exe
 
 #define MyAppName "ParsGate"
-#define MyAppVersion "0.5"
+#define MyAppVersion "0.6"
 #define MyAppPublisher "ParsGate Team"
 #define MyAppURL "https://github.com/janahitak/ParsGate"
 #define MyAppExeName "ParsGate.exe"
@@ -19,7 +19,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=no
 OutputDir=.
-OutputBaseFilename=ParsGate-Setup-v0.5
+OutputBaseFilename=ParsGate-Setup-v0.6
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -39,9 +39,9 @@ Name: "launchafterinstall"; Description: "Run after install"; GroupDescription: 
 Source: "..\src\ParsGate\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "Run ParsGate with admin rights"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "Run ParsGate (elevated via scheduled task)"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "Run ParsGate with admin rights"; Tasks: desktopicon
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "Run ParsGate (elevated via scheduled task)"; Tasks: desktopicon
 
 [Run]
 ; Register the elevated scheduled task - /it ensures interactive session (not Session 0)

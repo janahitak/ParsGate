@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="ParsGate v0.5"
+        Title="ParsGate v0.6"
         Height="650"
         Width="1000"
         MinHeight="600"
@@ -21,20 +21,74 @@
         StateChanged="Window_StateChanged">
     
     <Window.Resources>
-        <Style x:Key="MainButtonStyle" TargetType="Button" BasedOn="{StaticResource GlobalButtonStyle}">
-            <Setter Property="MinHeight" Value="56" />
-            <Setter Property="FontSize" Value="20" />
-            <Setter Property="Padding" Value="24,12" />
-        </Style>
-        
-        <Style x:Key="HugeConnectButtonStyle" TargetType="Button" BasedOn="{StaticResource GlobalButtonStyle}">
-            <Setter Property="Width" Value="320" />
-            <Setter Property="Height" Value="140" />
-            <Setter Property="FontSize" Value="28" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="BorderThickness" Value="4" />
-        </Style>
-    </Window.Resources>
+            <Style x:Key="MainButtonStyle" TargetType="Button" BasedOn="{StaticResource GlobalButtonStyle}">
+                <Setter Property="MinHeight" Value="56" />
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="Padding" Value="24,12" />
+            </Style>
+
+            <!-- Circular Connect/Disconnect Button Template -->
+            <ControlTemplate x:Key="CircularButtonTemplate" TargetType="Button">
+                <Border x:Name="Border"
+                        Width="200"
+                        Height="200"
+                        CornerRadius="100"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="3"
+                        SnapsToDevicePixels="True">
+                    <ContentPresenter HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      RecognizesAccessKey="True" />
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Border" Property="BorderThickness" Value="4" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BrushHover}" />
+                    </Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True">
+                        <Setter TargetName="Border" Property="BorderThickness" Value="4" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BrushHover}" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BrushDisabled}" />
+                        <Setter Property="Foreground" Value="{StaticResource BrushDisabled}" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+
+            <Style x:Key="HugeConnectButtonStyle" TargetType="Button" BasedOn="{StaticResource GlobalButtonStyle}">
+                <Setter Property="Width" Value="200" />
+                <Setter Property="Height" Value="200" />
+                <Setter Property="FontSize" Value="28" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="BorderThickness" Value="3" />
+                <Setter Property="Template" Value="{StaticResource CircularButtonTemplate}" />
+            </Style>
+
+            <!-- Dark ComboBox Style for Config Selector -->
+            <Style x:Key="DarkConfigComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource GlobalComboBoxStyle}">
+                <Setter Property="Background" Value="#1A1A26" />
+                <Setter Property="Foreground" Value="#FFFFFF" />
+                <Setter Property="BorderBrush" Value="#D4AF37" />
+                <Setter Property="BorderThickness" Value="3" />
+                <Setter Property="FontSize" Value="18" />
+                <Setter Property="MinHeight" Value="48" />
+                <Setter Property="Padding" Value="12,8" />
+                <Setter Property="Resources">
+                    <Setter.Value>
+                        <ResourceDictionary>
+                            <!-- Override system colors for dark dropdown -->
+                            <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#1A1A26" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#D4AF37" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#000000" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#1A1A26" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FFFFFF" />
+                        </ResourceDictionary>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Window.Resources>
 
     <Grid Margin="16">
         <Grid.RowDefinitions>
@@ -100,12 +154,8 @@
                           Width="400"
                           MinHeight="48"
                           FontSize="18"
-                          FontFamily="{StaticResource FontVazirmatn}"
-                          Background="#000000"
-                          Foreground="#FFFFFF"
-                          BorderBrush="#FFFFFF"
-                          BorderThickness="3"
-                          Padding="8,4"
+                          FontFamily="Vazirmatn, Tahoma, Segoe UI"
+                          Style="{StaticResource DarkConfigComboBoxStyle}"
                           AutomationProperties.Name="لیست کانفیگ‌ها"
                           SelectionChanged="ConfigComboBox_SelectionChanged"
                           DisplayMemberPath="DisplayText" />

@@ -25,7 +25,7 @@ namespace ParsGate.Views
         private readonly ObservableCollection<VpnConfigItem> _configs = new();
         private VpnConfigItem? _selectedConfig;
         private bool _isConnecting = false;
-        
+
         // System Tray
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
         private bool _isMinimizedToTray = false;
@@ -46,7 +46,7 @@ namespace ParsGate.Views
         public MainWindow()
         {
             InitializeComponent();
-            
+
             // Load window icon safely with fallback (prevents static resource crash)
             try
             {
@@ -62,6 +62,9 @@ namespace ParsGate.Views
             LoadSettings();
             RefreshConfigComboBox();
             CoreManager.StatusChanged += OnCoreStatusChanged;
+
+            // Keep in taskbar when minimized
+            ShowInTaskbar = true;
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -177,7 +180,7 @@ namespace ParsGate.Views
                 _notifyIcon = new System.Windows.Forms.NotifyIcon
                 {
                     Icon = appIcon,
-                    Text = "ParsGate v0.5",
+                    Text = "ParsGate v0.6",
                     Visible = true
                 };
 
@@ -192,7 +195,9 @@ namespace ParsGate.Views
 
         private void HideToTray()
         {
-            Hide();
+            // Keep ShowInTaskbar = true so app stays visible in Windows Taskbar when minimized
+            // and works properly when pinned to Taskbar
+            WindowState = WindowState.Minimized;
             _isMinimizedToTray = true;
             if (_notifyIcon != null)
             {

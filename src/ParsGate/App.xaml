@@ -204,7 +204,7 @@
                                                   Focusable="False"
                                                   ClickMode="Press"
                                                   IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                                  Template="{DynamicResource GlobalToggleButtonStyle}"
+                                                  Template="{DynamicResource GlobalToggleButtonControlTemplate}"
                                                   BorderThickness="0"
                                                   Background="Transparent"
                                                   HorizontalAlignment="Stretch"
@@ -267,6 +267,39 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <!-- ToggleButton ControlTemplate (extracted from GlobalToggleButtonStyle for ComboBox use) -->
+            <ControlTemplate x:Key="GlobalToggleButtonControlTemplate" TargetType="ToggleButton">
+                <Border x:Name="Border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="4"
+                        SnapsToDevicePixels="True">
+                    <ContentPresenter HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Margin="{TemplateBinding Padding}"
+                                      RecognizesAccessKey="True" />
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsChecked" Value="True">
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BrushActive}" />
+                        <Setter TargetName="Border" Property="BorderThickness" Value="4" />
+                    </Trigger>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BrushHover}" />
+                        <Setter TargetName="Border" Property="BorderThickness" Value="4" />
+                    </Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True">
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BrushHover}" />
+                        <Setter TargetName="Border" Property="BorderThickness" Value="4" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BrushDisabled}" />
+                        <Setter Property="Foreground" Value="{StaticResource BrushDisabled}" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
 
             <!-- TextBox Style -->
             <Style TargetType="TextBox" x:Key="GlobalTextBoxStyle">

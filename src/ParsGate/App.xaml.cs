@@ -23,6 +23,15 @@ namespace ParsGate
                 // sees the mutex held by the non-elevated process and exits immediately!
                 if (!IsRunningAsAdministrator())
                 {
+                    // ZERO-UAC LAUNCH: Try to run via Scheduled Task silently
+                    // If schtasks /run succeeds, the elevated task will start and we exit
+                    if (RunElevatedTaskSilently())
+                    {
+                        Shutdown();
+                        return;
+                    }
+
+                    // FALLBACK: If schtasks fails, use runas (triggers UAC prompt)
                     var result = MessageBox.Show(
                         "ParsGate نیاز به مجوز مدیر (Administrator) دارد برای:\n" +
                         "• ایجاد اینترفیس TUN (ParsGate-TUN)\n" +
@@ -186,6 +195,28 @@ namespace ParsGate
             using var identity = WindowsIdentity.GetCurrent();
             var principal = new WindowsPrincipal(identity);
             return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+
+        private static bool RunElevatedTaskSilently()
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = "/run /tn \"ParsGateElevatedTask\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                using var process = Process.Start(startInfo);
+                process?.WaitForExit(3000);
+                return process?.ExitCode == 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static void RestartAsAdministrator()
