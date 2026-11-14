@@ -18,38 +18,7 @@ namespace ParsGate
         {
             try
             {
-                // FIRST: Check administrator privileges BEFORE acquiring mutex
-                // If we acquire mutex first then restart as admin, the elevated process
-                // sees the mutex held by the non-elevated process and exits immediately!
-                if (!IsRunningAsAdministrator())
-                {
-                    // ZERO-UAC LAUNCH: Try to run via Scheduled Task silently
-                    // If schtasks /run succeeds, the elevated task will start and we exit
-                    if (RunElevatedTaskSilently())
-                    {
-                        Shutdown();
-                        return;
-                    }
-
-                    // FALLBACK: If schtasks fails, use runas (triggers UAC prompt)
-                    var result = MessageBox.Show(
-                        "ParsGate نیاز به مجوز مدیر (Administrator) دارد برای:\n" +
-                        "• ایجاد اینترفیس TUN (ParsGate-TUN)\n" +
-                        "• مدیریت قوانین فایروال (Kill Switch)\n\n" +
-                        "آیا می‌خواهید با مجوز مدیر مجدداً اجرا شود؟",
-                        "مجوز مدیر لازم است",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Warning);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        RestartAsAdministrator();
-                    }
-                    Shutdown();
-                    return;
-                }
-
-                // SECOND: Now that we're admin, acquire the single-instance mutex
+                // FIRST: Check single-instance mutex
                 bool createdNew;
                 _singleInstanceMutex = new Mutex(true, MutexName, out createdNew);
                 if (!createdNew)
@@ -146,7 +115,7 @@ namespace ParsGate
                 msg += $"\n\nجزئیات در فایل لاگ ذخیره شد:\n" +
                        $"{Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)}\\ParsGate\\startup_error.log\n" +
                        $"%TEMP%\\ParsGate_startup_error.log";
-                
+
                 MessageBox.Show(
                     msg,
                     "خطای راه‌اندازی",
@@ -186,54 +155,6 @@ namespace ParsGate
                         break;
                     }
                 }
-            }
-            catch { }
-        }
-
-        private static bool IsRunningAsAdministrator()
-        {
-            using var identity = WindowsIdentity.GetCurrent();
-            var principal = new WindowsPrincipal(identity);
-            return principal.IsInRole(WindowsBuiltInRole.Administrator);
-        }
-
-        private static bool RunElevatedTaskSilently()
-        {
-            try
-            {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = "schtasks.exe",
-                    Arguments = "/run /tn \"ParsGateElevatedTask\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                };
-                using var process = Process.Start(startInfo);
-                process?.WaitForExit(3000);
-                return process?.ExitCode == 0;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static void RestartAsAdministrator()
-        {
-            try
-            {
-                var exePath = Process.GetCurrentProcess().MainModule?.FileName;
-                if (string.IsNullOrEmpty(exePath)) return;
-
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = exePath,
-                    UseShellExecute = true,
-                    Verb = "runas",
-                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
-                };
-                Process.Start(startInfo);
             }
             catch { }
         }
