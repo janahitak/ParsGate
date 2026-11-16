@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -18,226 +19,284 @@ namespace ParsGate
 {
     public partial class SettingsWindow : Window
     {
-        private AppSettings _settings;
+        private readonly AppSettings _settings;
         private readonly MainWindow _mainWindow;
+        private List<ProcessInfo> _processes = new();
 
-        public SettingsWindow(MainWindow mainWindow, AppSettings settings)
+        public SettingsWindow(AppSettings settings, MainWindow mainWindow)
         {
             InitializeComponent();
-            _mainWindow = mainWindow;
             _settings = settings;
-
-            // Load settings into UI
-            LoadSettingsToUi();
+            _mainWindow = mainWindow;
+            LoadSettings();
+            LoadProcesses();
         }
 
-        private void LoadSettingsToUi()
+        private void LoadSettings()
         {
-            // Iran Direct
-            chkIranDirect.IsChecked = _settings.IranDirectEnabled;
+            IranDirectCheck.IsChecked = _settings.IranDirect;
+            KillSwitchCheck.IsChecked = _settings.KillSwitchEnabled;
+            ForceFragmentCheck.IsChecked = _settings.ForceFragment;
+            FragmentLengthBox.Text = _settings.FragmentLength;
+            FragmentIntervalBox.Text = _settings.FragmentInterval;
+            AutoConnectCheck.IsChecked = _settings.AutoConnect;
+            AutoUpdateCheck.IsChecked = _settings.AutoUpdateSubscription;
 
-            // Kill Switch
-            chkKillSwitch.IsChecked = _settings.KillSwitchEnabled;
+            RemoteDnsBox.Text = _settings.CustomRemoteDns;
+            DirectDnsBox.Text = _settings.CustomDirectDns;
 
-            // Split Tunneling
-            chkSplitTunnel.IsChecked = _settings.SplitTunnelEnabled;
+            // Split Tunnel
+            SplitTunnelCheck.IsChecked = _settings.SplitTunnelEnabled;
 
-            // Split Tunnel Mode
-            cmbSplitTunnelMode.Items.Clear();
-            cmbSplitTunnelMode.Items.Add(new ComboBoxItem { Content = "استثنای انتخاب شده (پیش‌فرض)", Tag = SplitTunnelMode.ExcludeSelected });
-            cmbSplitTunnelMode.Items.Add(new ComboBoxItem { Content = "فقط انتخاب شده", Tag = SplitTunnelMode.OnlySelected });
-
-            var selectedMode = _settings.SplitTunnelMode;
-            foreach (ComboBoxItem item in cmbSplitTunnelMode.Items)
+            // Load SplitTunnelMode
+            string modeTag = _settings.SplitTunnelMode switch
             {
-                if (item.Tag is SplitTunnelMode mode && mode == selectedMode)
+                SplitTunnelMode.ExcludeSelected => "ExcludeApps",
+                SplitTunnelMode.OnlySelected => "OnlySelectedApps",
+                _ => "ExcludeApps"
+            };
+
+            foreach (ComboBoxItem item in SplitTunnelModeBox.Items)
+            {
+                if (item.Tag?.ToString() == modeTag)
                 {
-                    cmbSplitTunnelMode.SelectedItem = item;
+                    SplitTunnelModeBox.SelectedItem = item;
                     break;
                 }
             }
 
-            // Process list
-            lstSplitTunnelProcesses.ItemsSource = _settings.SplitTunnelProcessNames;
-
-            // Custom domains/IPs
-            txtSplitTunnelCustom.Text = string.Join(Environment.NewLine, _settings.SplitTunnelCustomDomainsOrIps);
-
-            // Fragment
-            chkForceFragment.IsChecked = _settings.ForceFragmentEnabled;
-            txtFragmentLength.Text = _settings.FragmentLength;
-            txtFragmentInterval.Text = _settings.FragmentInterval;
-
-            // Auto behaviors
-            chkAutoConnect.IsChecked = _settings.AutoConnectOnStart;
-            chkAutoUpdateSubs.IsChecked = _settings.AutoUpdateSubsOnStart;
-
-            // Custom DNS
-            txtCustomRemoteDns.Text = _settings.CustomRemoteDns;
-            txtCustomDirectDns.Text = _settings.CustomDirectDns;
+            // Load custom domains/IPs
+            foreach (var entry in _settings.SplitTunnelCustomDomainsOrIps)
+            {
+                CustomDomainIpListBox.Items.Add(entry);
+            }
         }
 
-        private void BtnAddProcess_Click(object sender, RoutedEventArgs e)
+        private async void LoadProcesses()
         {
-            var dlg = new Microsoft.Win32.OpenFileDialog
+            try
             {
-                Title = "انتخاب فایل اجرایی",
-                Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*"
-            };
-            if (dlg.ShowDialog() == true)
-            {
-                var processName = Path.GetFileName(dlg.FileName);
-                if (!_settings.SplitTunnelProcessNames.Contains(processName, StringComparer.OrdinalIgnoreCase))
+                _processes = await Task.Run(() =>
                 {
-                    _settings.SplitTunnelProcessNames.Add(processName);
-                    lstSplitTunnelProcesses.Items.Refresh();
-                }
-            }
-        }
-
-        private void BtnRemoveProcess_Click(object sender, RoutedEventArgs e)
-        {
-            if (lstSplitTunnelProcesses.SelectedItem is string processName)
-            {
-                _settings.SplitTunnelProcessNames.Remove(processName);
-                lstSplitTunnelProcesses.Items.Refresh();
-            }
-        }
-
-        private void BtnSave_Click(object sender, RoutedEventArgs e)
-        {
-            // Save from UI to settings
-            _settings.IranDirectEnabled = chkIranDirect.IsChecked ?? true;
-            _settings.KillSwitchEnabled = chkKillSwitch.IsChecked ?? false;
-            _settings.SplitTunnelEnabled = chkSplitTunnel.IsChecked ?? false;
-
-            if (cmbSplitTunnelMode.SelectedItem is ComboBoxItem selectedItem && selectedItem.Tag is SplitTunnelMode mode)
-            {
-                _settings.SplitTunnelMode = mode;
-            }
-
-            _settings.SplitTunnelCustomDomainsOrIps = txtSplitTunnelCustom.Text
-                .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .ToList();
-
-            _settings.ForceFragmentEnabled = chkForceFragment.IsChecked ?? false;
-            _settings.FragmentLength = txtFragmentLength.Text;
-            _settings.FragmentInterval = txtFragmentInterval.Text;
-
-            _settings.AutoConnectOnStart = chkAutoConnect.IsChecked ?? false;
-            _settings.AutoUpdateSubsOnStart = chkAutoUpdateSubs.IsChecked ?? false;
-
-            _settings.CustomRemoteDns = txtCustomRemoteDns.Text.Trim();
-            _settings.CustomDirectDns = txtCustomDirectDns.Text.Trim();
-
-            // Save to disk
-            SettingsManager.Save(_settings);
-
-            // Apply Kill Switch change immediately if connected
-            if (CoreManager.IsConnected)
-            {
-                if (_settings.KillSwitchEnabled)
-                {
-                    var currentConfig = CoreManager.CurrentConfig;
-                    if (currentConfig != null)
+                    var list = new List<ProcessInfo>();
+                    foreach (var p in Process.GetProcesses())
                     {
-                        var ips = ResolveServerAddresses(currentConfig.ServerAddress);
-                        var result = FirewallManager.EnableKillSwitch(
-                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cores", "xray.exe"),
-                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cores", "sing-box.exe"),
-                            ips);
-                        if (!result.Success)
+                        try
                         {
-                            _mainWindow.Announce($"Kill Switch فعال نشد: {result.ErrorMessage}");
+                            if (!string.IsNullOrEmpty(p.MainWindowTitle) || p.SessionId == Process.GetCurrentProcess().SessionId)
+                            {
+                                list.Add(new ProcessInfo
+                                {
+                                    Id = p.Id,
+                                    Name = p.ProcessName,
+                                    DisplayName = $"{p.ProcessName} (PID: {p.Id})"
+                                });
+                            }
                         }
+                        catch { }
                     }
-                }
-                else
+                    return list.OrderBy(x => x.DisplayName).ToList();
+                });
+
+                ProcessListBox.ItemsSource = _processes;
+            }
+            catch (Exception ex)
+            {
+                LogError("LoadProcesses", ex);
+            }
+        }
+
+        private void BtnRefreshProcesses_Click(object sender, RoutedEventArgs e)
+        {
+            LoadProcesses();
+        }
+
+        private void BtnAddSelectedProcesses_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = ProcessListBox.SelectedItems.Cast<ProcessInfo>().ToList();
+            foreach (var p in selected)
+            {
+                if (!_settings.SplitTunnelProcessNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase))
                 {
-                    FirewallManager.DisableKillSwitch();
+                    _settings.SplitTunnelProcessNames.Add(p.Name);
+                    Announce($"برنامه {p.Name} به لیست اسپلیت تونل اضافه شد");
                 }
             }
-
-            _mainWindow.Announce("تنظیمات ذخیره شد");
-            Close();
         }
 
-        private void BtnCancel_Click(object sender, RoutedEventArgs e)
+        private void BtnAddCustomDomainIp_Click(object sender, RoutedEventArgs e)
         {
-            Close();
+            var text = CustomDomainIpBox.Text?.Trim();
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            if (!_settings.SplitTunnelCustomDomainsOrIps.Contains(text, StringComparer.OrdinalIgnoreCase))
+            {
+                _settings.SplitTunnelCustomDomainsOrIps.Add(text);
+                CustomDomainIpListBox.Items.Add(text);
+                Announce($"دامنه یا آی‌پی {text} اضافه شد");
+            }
+            CustomDomainIpBox.Clear();
         }
 
-        private void BtnExport_Click(object sender, RoutedEventArgs e)
+        private void BtnRemoveCustomDomainIp_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string entry)
+            {
+                _settings.SplitTunnelCustomDomainsOrIps.Remove(entry);
+                CustomDomainIpListBox.Items.Remove(entry);
+                Announce($"دامنه یا آی‌پی {entry} حذف شد");
+            }
+        }
+
+        private async void BtnUpdateIranRules_Click(object sender, RoutedEventArgs e)
+        {
+            var btn = sender as Button;
+            btn.IsEnabled = false;
+            btn.Content = "در حال بروزرسانی...";
+
+            try
+            {
+                var ruleDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "rules");
+                Directory.CreateDirectory(ruleDir);
+
+                var client = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+                var geoipUrl = "https://github.com/Chocolate4U/Iran-sing-box-rules/releases/download/2025.09.01/geoip-ir.srs";
+                var geositeUrl = "https://github.com/Chocolate4U/Iran-sing-box-rules/releases/download/2025.09.01/geosite-ir.srs";
+
+                await client.DownloadFileTaskAsync(geoipUrl, Path.Combine(ruleDir, "geoip-ir.srs"));
+                await client.DownloadFileTaskAsync(geositeUrl, Path.Combine(ruleDir, "geosite-ir.srs"));
+
+                Announce("قوانین ایران با موفقیت بروزرسانی شدند");
+            }
+            catch (Exception ex)
+            {
+                Announce($"خطا در بروزرسانی قوانین ایران: {ex.Message}");
+                LogError("BtnUpdateIranRules_Click", ex);
+            }
+            finally
+            {
+                btn.IsEnabled = true;
+                btn.Content = "بروزرسانی قوانین ایران";
+            }
+        }
+
+        private void BtnExportSettings_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new SaveFileDialog
             {
-                Title = "صادرات تنظیمات",
                 Filter = "JSON Files (*.json)|*.json",
-                FileName = $"ParsGate-Backup-{DateTime.Now:yyyyMMdd}.json"
+                FileName = "ParsGate-settings-backup.json"
             };
             if (dlg.ShowDialog() == true)
             {
                 try
                 {
-                    SettingsManager.ExportBackup(_settings, dlg.FileName);
-                    _mainWindow.Announce("تنظیمات صادر شد");
+                    var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(dlg.FileName, json);
+                    Announce("پشتیبان‌گیری تنظیمات با موفقیت انجام شد");
                 }
                 catch (Exception ex)
                 {
-                    _mainWindow.Announce($"خطای صادرات: {ex.Message}");
+                    Announce($"خطا در پشتیبان‌گیری: {ex.Message}");
+                    LogError("BtnExportSettings_Click", ex);
                 }
             }
         }
 
-        private void BtnImport_Click(object sender, RoutedEventArgs e)
+        private void BtnImportSettings_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new OpenFileDialog
             {
-                Title = "ورود تنظیمات",
                 Filter = "JSON Files (*.json)|*.json"
             };
             if (dlg.ShowDialog() == true)
             {
                 try
                 {
-                    var imported = SettingsManager.ImportBackup(dlg.FileName);
-                    _settings = imported;
-                    LoadSettingsToUi();
-                    _mainWindow.Announce("تنظیمات وارد شد");
+                    var json = File.ReadAllText(dlg.FileName);
+                    var imported = JsonSerializer.Deserialize<AppSettings>(json);
+                    if (imported != null)
+                    {
+                        // Migrate legacy fields
+                        imported.MigrateLegacyFields();
+
+                        // Copy all settings
+                        _settings.IranDirect = imported.IranDirect;
+                        _settings.KillSwitchEnabled = imported.KillSwitchEnabled;
+                        _settings.ForceFragment = imported.ForceFragment;
+                        _settings.FragmentLength = imported.FragmentLength;
+                        _settings.FragmentInterval = imported.FragmentInterval;
+                        _settings.AutoConnect = imported.AutoConnect;
+                        _settings.AutoUpdateSubscription = imported.AutoUpdateSubscription;
+                        _settings.CustomRemoteDns = imported.CustomRemoteDns;
+                        _settings.CustomDirectDns = imported.CustomDirectDns;
+                        _settings.SplitTunnelEnabled = imported.SplitTunnelEnabled;
+                        _settings.SplitTunnelMode = imported.SplitTunnelMode;
+                        _settings.SplitTunnelProcessNames = imported.SplitTunnelProcessNames;
+                        _settings.SplitTunnelCustomDomainsOrIps = imported.SplitTunnelCustomDomainsOrIps;
+                        _settings.SelectedServerIndex = imported.SelectedServerIndex;
+
+                        LoadSettings();
+                        Announce("تنظیمات با موفقیت بازیابی شدند");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _mainWindow.Announce($"خطای ورود: {ex.Message}");
+                    Announce($"خطا در بازیابی تنظیمات: {ex.Message}");
+                    LogError("BtnImportSettings_Click", ex);
                 }
             }
         }
 
-        private List<string> ResolveServerAddresses(string serverAddress)
+        private void BtnSaveClose_Click(object sender, RoutedEventArgs e)
         {
-            var ips = new List<string>();
-            if (IPAddress.TryParse(serverAddress, out var ip))
+            // Save Split Tunnel settings
+            _settings.SplitTunnelEnabled = SplitTunnelCheck.IsChecked == true;
+
+            if (SplitTunnelModeBox.SelectedItem is ComboBoxItem selectedMode)
             {
-                ips.Add(serverAddress);
-            }
-            else
-            {
-                try
+                _settings.SplitTunnelMode = selectedMode.Tag?.ToString() switch
                 {
-                    var hostEntry = Dns.GetHostEntry(serverAddress);
-                    foreach (var addr in hostEntry.AddressList)
-                    {
-                        if (addr.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ||
-                            addr.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
-                        {
-                            ips.Add(addr.ToString());
-                        }
-                    }
-                }
-                catch { }
+                    "ExcludeApps" => SplitTunnelMode.ExcludeSelected,
+                    "OnlySelectedApps" => SplitTunnelMode.OnlySelected,
+                    _ => SplitTunnelMode.ExcludeSelected
+                };
             }
-            return ips.Distinct().ToList();
+
+            _settings.CustomRemoteDns = RemoteDnsBox.Text?.Trim() ?? "";
+            _settings.CustomDirectDns = DirectDnsBox.Text?.Trim() ?? "";
+            _settings.FragmentLength = FragmentLengthBox.Text?.Trim() ?? "10-20";
+            _settings.FragmentInterval = FragmentIntervalBox.Text?.Trim() ?? "10-20";
+
+            _settings.Save();
+            Announce("تنظیمات ذخیره شد");
+            Close();
+        }
+
+        private void Announce(string message)
+        {
+            _mainWindow?.AnnounceToLiveRegion(message);
+        }
+
+        private void LogError(string context, Exception ex)
+        {
+            try
+            {
+                var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ParsGate", "logs");
+                Directory.CreateDirectory(logDir);
+                var logFile = Path.Combine(logDir, "settings_errors.log");
+                File.AppendAllText(logFile, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {context}: {ex}\n");
+            }
+            catch { }
+        }
+
+        public class ProcessInfo
+        {
+            public int Id { get; set; }
+            public string Name { get; set; } = "";
+            public string DisplayName { get; set; } = "";
+            public bool IsSelected { get; set; }
         }
     }
 }
