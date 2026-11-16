@@ -18,6 +18,16 @@ namespace ParsGate
         {
             try
             {
+                // Check for --restore-network CLI flag FIRST (before mutex)
+                var args = Environment.GetCommandLineArgs();
+                if (args.Length > 1 && args[1].Equals("--restore-network", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Run headless, restore network, exit
+                    FirewallManager.RestoreNetwork();
+                    Environment.Exit(0);
+                    return;
+                }
+
                 // FIRST: Check single-instance mutex
                 bool createdNew;
                 _singleInstanceMutex = new Mutex(true, MutexName, out createdNew);
@@ -78,7 +88,7 @@ namespace ParsGate
             {
                 var logPaths = new[]
                 {
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ParsGate", "startup_error.log"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ParsGate", "startup_error.log"),
                     Path.Combine(Path.GetTempPath(), "ParsGate_startup_error.log")
                 };
 
@@ -113,7 +123,7 @@ namespace ParsGate
                     msg += $"\n\nInner Exception: {ex.InnerException.Message}";
                 }
                 msg += $"\n\nجزئیات در فایل لاگ ذخیره شد:\n" +
-                       $"{Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)}\\ParsGate\\startup_error.log\n" +
+                       $"{Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)}\\ParsGate\\startup_error.log\n" +
                        $"%TEMP%\\ParsGate_startup_error.log";
 
                 MessageBox.Show(
@@ -131,9 +141,31 @@ namespace ParsGate
 
         protected override void OnExit(ExitEventArgs e)
         {
-            _singleInstanceMutex?.ReleaseMutex();
-            _singleInstanceMutex?.Dispose();
-            base.OnExit(e);
+            // Ensure clean disconnect and network restore on normal exit
+            try
+            {
+                CoreManager.DisconnectAsync().Wait(5000);
+            }
+            catch { }
+            finally
+            {
+                _singleInstanceMutex?.ReleaseMutex();
+                _singleInstanceMutex?.Dispose();
+                base.OnExit(e);
+            }
+        }
+
+        protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+        {
+            // Windows shutdown/logoff - do NOT cancel, allow graceful shutdown
+            // Disconnect cores and restore network
+            try
+            {
+                CoreManager.DisconnectAsync().Wait(5000);
+            }
+            catch { }
+
+            base.OnSessionEnding(e);
         }
 
         private void ActivateExistingInstance()
@@ -181,16 +213,16 @@ namespace ParsGate
         }
 
         public static string BaseDirectory => AppDomain.CurrentDomain.BaseDirectory;
-    }
 
-    internal static class NativeMethods
-    {
-        public const int SW_RESTORE = 9;
+        internal static class NativeMethods
+        {
+            public const int SW_RESTORE = 9;
 
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+            [System.Runtime.InteropServices.DllImport("user32.dll")]
+            public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        public static extern bool SetForegroundWindow(IntPtr hWnd);
+            [System.Runtime.InteropServices.DllImport("user32.dll")]
+            public static extern bool SetForegroundWindow(IntPtr hWnd);
+        }
     }
 }

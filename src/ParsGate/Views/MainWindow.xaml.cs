@@ -102,9 +102,17 @@ namespace ParsGate.Views
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            // Only hide to tray if we've been shown and user is trying to close
+            // Check if this is a Windows shutdown/logoff
+            // If so, do NOT cancel - let the app close normally
+            if (e.CloseReason == CloseReason.WindowsShutDown || e.CloseReason == CloseReason.TaskManagerClosing)
+            {
+                // Let it close; App.OnSessionEnding handles cleanup
+                return;
+            }
+
+            // Only hide to tray if user clicks the close button (CloseReason.UserClosing)
             // Don't hide on initial startup
-            if (IsLoaded && !_isMinimizedToTray)
+            if (IsLoaded && !_isMinimizedToTray && e.CloseReason == CloseReason.UserClosing)
             {
                 e.Cancel = true;
                 HideToTray();
@@ -321,17 +329,9 @@ namespace ParsGate.Views
 
         private void BtnOpenSettings_Click(object sender, RoutedEventArgs e)
         {
-            var settingsWindow = new SettingsWindow(_settings);
+            var settingsWindow = new SettingsWindow(this, _settings);
             settingsWindow.Owner = this;
-            settingsWindow.SettingsSaved += OnSettingsSaved;
             settingsWindow.ShowDialog();
-        }
-
-        private void OnSettingsSaved(AppSettings newSettings)
-        {
-            _settings = newSettings;
-            LoadSettings();
-            UpdateLiveStatus("تنظیمات ذخیره شد");
         }
 
         private void BtnManageSubscriptions_Click(object sender, RoutedEventArgs e)

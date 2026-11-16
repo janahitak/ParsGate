@@ -1,16 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ParsGate.Models;
+using ParsGate.Services;
 
 namespace ParsGate.Services
 {
     public static class SingBoxGenerator
     {
-        public static string GenerateSingBoxConfigJson(AppSettings settings, int xraySocksPort = 10808)
+        // Xray SOCKS port must match ConfigParser.XraySocksPort
+        public const int XraySocksPort = ConfigParser.XraySocksPort;
+
+        public static string GenerateSingBoxConfigJson(AppSettings settings, string serverAddress, IEnumerable<string> resolvedServerIps, int xraySocksPort = XraySocksPort)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
+            if (string.IsNullOrWhiteSpace(serverAddress)) throw new ArgumentException("Server address cannot be empty", nameof(serverAddress));
 
             var config = new JsonObject
             {
@@ -26,7 +33,7 @@ namespace ParsGate.Services
                         ["type"] = "tun",
                         ["tag"] = "tun-in",
                         ["interface_name"] = "ParsGate-TUN",
-                        ["inet4_address"] = "172.19.0.1/30",
+                        ["address"] = new JsonArray("172.19.0.1/30"),
                         ["auto_route"] = true,
                         ["strict_route"] = true,
                         ["stack"] = "mixed",
@@ -46,7 +53,7 @@ namespace ParsGate.Services
                 {
                     ["servers"] = new JsonArray(),
                     ["rules"] = new JsonArray(),
-                    ["final"] = "dns-out",
+                    ["final"] = "remote-dns", // TAG of a DNS server, not "dns-out"
                     ["strategy"] = "ipv4_only"
                 }
             };
@@ -54,19 +61,14 @@ namespace ParsGate.Services
             // Outbounds
             var outbounds = config["outbounds"] as JsonArray;
 
-            // Proxy outbound -> Xray SOCKS5
+            // Proxy outbound -> Xray SOCKS5 (no udp_over_tcp; Xray inbound has udp:true)
             outbounds!.Add(new JsonObject
             {
                 ["type"] = "socks",
                 ["tag"] = "proxy",
                 ["server"] = "127.0.0.1",
                 ["server_port"] = xraySocksPort,
-                ["version"] = "5",
-                ["udp_over_tcp"] = new JsonObject
-                {
-                    ["enabled"] = true,
-                    ["version"] = 2
-                }
+                ["version"] = "5"
             });
 
             // Direct outbound
@@ -94,11 +96,16 @@ namespace ParsGate.Services
             var dns = config["dns"] as JsonObject;
             var dnsServers = dns!["servers"] as JsonArray;
 
+            // Validate and set CustomRemoteDns
+            var remoteDns = ValidateDnsAddress(settings.CustomRemoteDns, "https://1.1.1.1/dns-query");
+            // Validate and set CustomDirectDns
+            var directDns = ValidateDnsAddress(settings.CustomDirectDns, "1.1.1.1");
+
             // Remote DNS (via proxy) - for international domains
             dnsServers!.Add(new JsonObject
             {
                 ["tag"] = "remote-dns",
-                ["address"] = settings.CustomRemoteDns,
+                ["address"] = remoteDns,
                 ["detour"] = "proxy"
             });
 
@@ -106,7 +113,7 @@ namespace ParsGate.Services
             dnsServers.Add(new JsonObject
             {
                 ["tag"] = "direct-dns",
-                ["address"] = settings.CustomDirectDns,
+                ["address"] = directDns,
                 ["detour"] = "direct"
             });
 
@@ -124,12 +131,8 @@ namespace ParsGate.Services
                     {
                         ["type"] = "domain_suffix",
                         ["domain_suffix"] = new JsonArray(".ir")
-                    },
-                    new JsonObject
-                    {
-                        ["type"] = "domain_suffix",
-                        ["domain_suffix"] = new JsonArray("geosite-ir")
                     }
+                    // geosite-ir is handled via rule_set in route rules, not as domain_suffix here
                 },
                 ["server"] = "direct-dns"
             });
@@ -144,7 +147,75 @@ namespace ParsGate.Services
             var route = config["route"] as JsonObject;
             var rules = route!["rules"] as JsonArray;
 
-            // Rule 0: Block QUIC (UDP 443) to force Chrome/Edge to fall back to TCP/HTTP2 over Xray SOCKS5
+            // === CRITICAL: FIRST rules to prevent routing loop ===
+            // Rule 0a: xray.exe process -> direct (prevents xray's own traffic from entering TUN)
+            rules!.Add(new JsonObject
+            {
+                ["type"] = "logical",
+                ["mode"] = "or",
+                ["rules"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["type"] = "process",
+                        ["process"] = new JsonArray("xray.exe")
+                    }
+                },
+                ["outbound"] = "direct"
+            });
+
+            // Rule 0b: Resolved VPN server IPs -> direct (prevents loop to VPN server)
+            var serverIpRules = new JsonArray();
+            foreach (var ip in resolvedServerIps)
+            {
+                if (IPAddress.TryParse(ip, out var addr))
+                {
+                    serverIpRules.Add(new JsonObject
+                    {
+                        ["type"] = "ip_cidr",
+                        ["ip_cidr"] = new JsonArray($"{ip}/32")
+                    });
+                }
+            }
+            // Also add the original server address (domain) for DNS resolution via direct
+            // This is handled by a DNS rule below, but we also add it here as a fallback
+            if (!serverAddress.All(c => char.IsDigit(c) || c == '.' || c == ':'))
+            {
+                // It's a domain, add DNS rule for it to resolve via direct DNS
+                dnsRules!.Insert(0, new JsonObject
+                {
+                    ["type"] = "domain",
+                    ["domain"] = new JsonArray(serverAddress),
+                    ["server"] = "direct-dns"
+                });
+            }
+
+            if (serverIpRules.Count > 0)
+            {
+                rules.Add(new JsonObject
+                {
+                    ["type"] = "logical",
+                    ["mode"] = "or",
+                    ["rules"] = serverIpRules,
+                    ["outbound"] = "direct"
+                });
+            }
+
+            // Rule 0c: Loopback and private ranges -> direct
+            rules.Add(new JsonObject
+            {
+                ["type"] = "logical",
+                ["mode"] = "or",
+                ["rules"] = new JsonArray
+                {
+                    new JsonObject { ["type"] = "ip_cidr", ["ip_cidr"] = new JsonArray("127.0.0.0/8", "::1/128") },
+                    new JsonObject { ["type"] = "ip_cidr", ["ip_cidr"] = new JsonArray("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7") },
+                    new JsonObject { ["type"] = "ip_cidr", ["ip_cidr"] = new JsonArray("169.254.0.0/16", "fe80::/10") }
+                },
+                ["outbound"] = "direct"
+            });
+
+            // Rule 1: Block QUIC (UDP 443) to force Chrome/Edge to fall back to TCP/HTTP2 over Xray SOCKS5
             rules!.Add(new JsonObject
             {
                 ["type"] = "logical",
@@ -166,36 +237,68 @@ namespace ParsGate.Services
                 ["outbound"] = "block"
             });
 
-            // Rule 1: Iran Direct (geoip-ir, geosite-ir) -> direct
+            // Rule 2: Iran Direct (rule_set for geoip-ir, geosite-ir) -> direct
             if (settings.IranDirectEnabled)
             {
-                rules!.Add(new JsonObject
+                var iranRules = new JsonArray();
+
+                // Add rule_set references if files exist
+                var rulesBaseDir = GetRulesBaseDirectory();
+                var geoipSrs = Path.Combine(rulesBaseDir, "geoip-ir.srs");
+                var geositeSrs = Path.Combine(rulesBaseDir, "geosite-ir.srs");
+
+                bool hasGeoip = File.Exists(geoipSrs);
+                bool hasGeosite = File.Exists(geositeSrs);
+
+                if (hasGeoip)
                 {
-                    ["type"] = "logical",
-                    ["mode"] = "or",
-                    ["rules"] = new JsonArray
+                    iranRules.Add(new JsonObject
                     {
-                        new JsonObject
-                        {
-                            ["type"] = "geoip",
-                            ["geoip"] = new JsonArray("geoip-ir")
-                        },
-                        new JsonObject
-                        {
-                            ["type"] = "geosite",
-                            ["geosite"] = new JsonArray("geosite-ir")
-                        },
-                        new JsonObject
-                        {
-                            ["type"] = "domain_suffix",
-                            ["domain_suffix"] = new JsonArray(".ir")
-                        }
-                    },
-                    ["outbound"] = "direct"
+                        ["type"] = "rule_set",
+                        ["rule_set"] = new JsonArray("geoip-ir"),
+                        ["action"] = "direct" // sing-box 1.12+ uses action
+                    });
+                }
+                else
+                {
+                    LogWarning("geoip-ir.srs not found at " + geoipSrs + "; skipping geoip rule");
+                }
+
+                if (hasGeosite)
+                {
+                    iranRules.Add(new JsonObject
+                    {
+                        ["type"] = "rule_set",
+                        ["rule_set"] = new JsonArray("geosite-ir"),
+                        ["action"] = "direct"
+                    });
+                }
+                else
+                {
+                    LogWarning("geosite-ir.srs not found at " + geositeSrs + "; skipping geosite rule");
+                }
+
+                // Always add .ir domain suffix rule
+                iranRules.Add(new JsonObject
+                {
+                    ["type"] = "domain_suffix",
+                    ["domain_suffix"] = new JsonArray(".ir"),
+                    ["action"] = "direct"
                 });
+
+                if (iranRules.Count > 0)
+                {
+                    rules!.Add(new JsonObject
+                    {
+                        ["type"] = "logical",
+                        ["mode"] = "or",
+                        ["rules"] = iranRules,
+                        ["outbound"] = "direct"
+                    });
+                }
             }
 
-            // Rule 2: Split Tunneling
+            // Rule 3: Split Tunneling
             if (settings.SplitTunnelEnabled && settings.SplitTunnelProcessNames.Count > 0)
             {
                 var processRules = new JsonArray();
@@ -213,7 +316,13 @@ namespace ParsGate.Services
 
                 if (processRules.Count > 0)
                 {
-                    if (settings.SplitTunnelMode == "OnlySelectedApps")
+                    var mode = settings.SplitTunnelMode;
+                    // Migrate legacy values
+                    if (mode == "ExcludeApps") mode = "ExcludeSelected";
+                    else if (mode == "ExcludeSelectedApps") mode = "ExcludeSelected";
+                    else if (mode == "OnlySelectedApps") mode = "OnlySelected";
+
+                    if (mode == "OnlySelected")
                     {
                         // Only selected apps go through proxy, rest direct
                         rules!.Add(new JsonObject
@@ -223,9 +332,10 @@ namespace ParsGate.Services
                             ["rules"] = processRules,
                             ["outbound"] = "proxy"
                         });
-                        // Final rule already set to "proxy", but we need to invert for ExcludeApps
+                        // Important: for OnlySelected, route.final should be "direct"
+                        route["final"] = "direct";
                     }
-                    else // ExcludeSelectedApps (default)
+                    else // ExcludeSelected (default)
                     {
                         // Selected apps go direct, rest through proxy
                         rules!.Add(new JsonObject
@@ -235,11 +345,12 @@ namespace ParsGate.Services
                             ["rules"] = processRules,
                             ["outbound"] = "direct"
                         });
+                        // route.final stays "proxy"
                     }
                 }
             }
 
-            // Rule 3: Custom domains/IPs for split tunneling
+            // Rule 4: Custom domains/IPs for split tunneling
             if (settings.SplitTunnelEnabled && settings.SplitTunnelCustomDomainsOrIps.Count > 0)
             {
                 var domainRules = new JsonArray();
@@ -274,7 +385,12 @@ namespace ParsGate.Services
                     foreach (var r in domainRules) combinedRules.Add(r);
                     foreach (var r in ipRules) combinedRules.Add(r);
 
-                    if (settings.SplitTunnelMode == "OnlySelectedApps")
+                    var mode = settings.SplitTunnelMode;
+                    if (mode == "ExcludeApps") mode = "ExcludeSelected";
+                    else if (mode == "ExcludeSelectedApps") mode = "ExcludeSelected";
+                    else if (mode == "OnlySelectedApps") mode = "OnlySelected";
+
+                    if (mode == "OnlySelected")
                     {
                         rules!.Add(new JsonObject
                         {
@@ -284,7 +400,7 @@ namespace ParsGate.Services
                             ["outbound"] = "proxy"
                         });
                     }
-                    else // ExcludeSelectedApps
+                    else // ExcludeSelected
                     {
                         rules!.Add(new JsonObject
                         {
@@ -297,12 +413,38 @@ namespace ParsGate.Services
                 }
             }
 
-            // Rule 4: Kill Switch - block all traffic if tunnel is down (handled by sing-box auto_route + strict_route)
-            // Note: Kill switch is implemented via sing-box's strict_route=true and system stack
-            // Additional explicit block rule can be added if needed
-
-            // Add rule_set references for geoip-ir and geosite-ir (files expected in rules/ directory)
+            // Add rule_set definitions at the top level (for geoip-ir and geosite-ir)
             // These are referenced in the route rules above
+            var ruleSets = new JsonArray();
+            var rulesBaseDir = GetRulesBaseDirectory();
+            var geoipSrsPath = Path.Combine(rulesBaseDir, "geoip-ir.srs");
+            var geositeSrsPath = Path.Combine(rulesBaseDir, "geosite-ir.srs");
+
+            if (File.Exists(geoipSrsPath))
+            {
+                ruleSets.Add(new JsonObject
+                {
+                    ["tag"] = "geoip-ir",
+                    ["type"] = "local",
+                    ["format"] = "binary",
+                    ["path"] = geoipSrsPath
+                });
+            }
+            if (File.Exists(geositeSrsPath))
+            {
+                ruleSets.Add(new JsonObject
+                {
+                    ["tag"] = "geosite-ir",
+                    ["type"] = "local",
+                    ["format"] = "binary",
+                    ["path"] = geositeSrsPath
+                });
+            }
+
+            if (ruleSets.Count > 0)
+            {
+                config["rule_set"] = ruleSets;
+            }
 
             return JsonSerializer.Serialize(config, new JsonSerializerOptions
             {
@@ -311,9 +453,65 @@ namespace ParsGate.Services
             });
         }
 
+        private static string GetRulesBaseDirectory()
+        {
+            // At runtime, rules are in %ProgramData%\ParsGate\rules\
+            // At build time (CI), they're in src\ParsGate\publish\rules\
+            // We check both, preferring ProgramData for runtime
+            var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            var runtimeDir = Path.Combine(programData, "ParsGate", "rules");
+            if (Directory.Exists(runtimeDir)) return runtimeDir;
+
+            // Fallback to base directory (for development/testing)
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var localDir = Path.Combine(baseDir, "rules");
+            if (Directory.Exists(localDir)) return localDir;
+
+            // Fallback to publish directory structure
+            var publishDir = Path.Combine(baseDir, "..", "publish", "rules");
+            publishDir = Path.GetFullPath(publishDir);
+            if (Directory.Exists(publishDir)) return publishDir;
+
+            return runtimeDir; // Return the expected runtime path even if it doesn't exist yet
+        }
+
+        private static string ValidateDnsAddress(string input, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return fallback;
+
+            var trimmed = input.Trim();
+
+            // Check if it's a valid IP address
+            if (IPAddress.TryParse(trimmed, out _))
+                return trimmed;
+
+            // Check if it's a valid DoH/DoT URL
+            if (trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("tls://", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+                    return trimmed;
+            }
+
+            // Check if it's a valid hostname (for plain DNS)
+            if (Uri.CheckHostName(trimmed) != UriHostNameType.Unknown)
+                return trimmed;
+
+            // Invalid, use fallback
+            LogWarning($"Invalid DNS address '{input}', using fallback '{fallback}'");
+            return fallback;
+        }
+
         private static bool IsCidr(string input)
         {
-            return input.Contains('/') && System.Net.IPAddress.TryParse(input.Split('/')[0], out _);
+            return input.Contains('/') && IPAddress.TryParse(input.Split('/')[0], out _);
+        }
+
+        private static void LogWarning(string message)
+        {
+            // In a real app, this would use ILogger or write to log file
+            // For now, write to Console which gets captured by CoreManager log files
+            Console.WriteLine($"[WARN] {message}");
         }
     }
 }

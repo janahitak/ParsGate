@@ -18,6 +18,9 @@ namespace ParsGate.Services
             Timeout = TimeSpan.FromSeconds(30)
         };
 
+        // Shared constant for Xray SOCKS port
+        public const int XraySocksPort = 10808;
+
         public static VpnConfigItem ParseUri(string uri)
         {
             if (string.IsNullOrWhiteSpace(uri))
@@ -42,6 +45,11 @@ namespace ParsGate.Services
                     item.Protocol = "trojan";
                     ParseTrojan(uri, item);
                 }
+                else if (uri.StartsWith("ss://", StringComparison.OrdinalIgnoreCase))
+                {
+                    item.Protocol = "shadowsocks";
+                    ParseShadowsocks(uri, item);
+                }
                 else
                 {
                     throw new ArgumentException($"Unsupported protocol: {uri.Substring(0, Math.Min(10, uri.Length))}...", nameof(uri));
@@ -55,7 +63,7 @@ namespace ParsGate.Services
             }
             catch (Exception ex)
             {
-                throw new ArgumentException($"Failed to parse URI: {ex.Message}", nameof(uri), ex);
+                throw new ArgumentException($"خطای پردازش URI: {ex.Message}", nameof(uri), ex);
             }
 
             return item;
@@ -66,7 +74,7 @@ namespace ParsGate.Services
             var regex = new Regex(@"^vless://([^@]+)@([^:]+):(\d+)\??(.*)?#?(.*)?$");
             var match = regex.Match(uri);
             if (!match.Success)
-                throw new ArgumentException("Invalid VLESS URI format");
+                throw new ArgumentException("فرمت VLESS نامعتبر است");
 
             var uuid = match.Groups[1].Value;
             item.ServerAddress = match.Groups[2].Value;
@@ -77,14 +85,6 @@ namespace ParsGate.Services
 
             var queryParams = ParseQueryString(query);
             item.RawUri = uri; // Store original
-
-            // Extract fragment parameters if present
-            if (queryParams.TryGetValue("fragment", out var fragment) ||
-                queryParams.TryGetValue("fragmentLength", out fragment) ||
-                queryParams.TryGetValue("fragmentInterval", out fragment))
-            {
-                // Fragment params exist in URI
-            }
         }
 
         private static void ParseVmess(string uri, VpnConfigItem item)
@@ -93,7 +93,7 @@ namespace ParsGate.Services
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
             var vmess = JsonSerializer.Deserialize<JsonObject>(json);
 
-            if (vmess == null) throw new ArgumentException("Invalid VMess JSON");
+            if (vmess == null) throw new ArgumentException("JSON نامعتبر VMess");
 
             item.ServerAddress = vmess["add"]?.ToString() ?? string.Empty;
             item.Port = int.TryParse(vmess["port"]?.ToString(), out var port) ? port : 0;
@@ -106,7 +106,7 @@ namespace ParsGate.Services
             var regex = new Regex(@"^trojan://([^@]+)@([^:]+):(\d+)\??(.*)?#?(.*)?$");
             var match = regex.Match(uri);
             if (!match.Success)
-                throw new ArgumentException("Invalid Trojan URI format");
+                throw new ArgumentException("فرمت Trojan نامعتبر است");
 
             var password = match.Groups[1].Value;
             item.ServerAddress = match.Groups[2].Value;
@@ -119,6 +119,50 @@ namespace ParsGate.Services
             item.RawUri = uri;
         }
 
+        private static void ParseShadowsocks(string uri, VpnConfigItem item)
+        {
+            // ss://method:password@server:port#name or ss://base64(method:password)@server:port#name
+            var regex = new Regex(@"^ss://([^@]+)@([^:]+):(\d+)\??(.*)?#?(.*)?$");
+            var match = regex.Match(uri);
+            if (!match.Success)
+                throw new ArgumentException("فرمت Shadowsocks نامعتبر است");
+
+            var userInfo = match.Groups[1].Value;
+            item.ServerAddress = match.Groups[2].Value;
+            item.Port = int.Parse(match.Groups[3].Value);
+            var query = match.Groups[4].Value;
+            var name = Uri.UnescapeDataString(match.Groups[5].Value);
+            if (!string.IsNullOrWhiteSpace(name)) item.Name = name;
+
+            var queryParams = ParseQueryString(query);
+            item.RawUri = uri;
+
+            // Decode userInfo (method:password)
+            try
+            {
+                string decoded;
+                try
+                {
+                    decoded = Encoding.UTF8.GetString(Convert.FromBase64String(userInfo));
+                }
+                catch
+                {
+                    decoded = userInfo; // Not base64, assume plain
+                }
+
+                var parts = decoded.Split(':', 2);
+                if (parts.Length == 2)
+                {
+                    item.ShadowsocksMethod = parts[0];
+                    item.ShadowsocksPassword = parts[1];
+                }
+            }
+            catch
+            {
+                throw new ArgumentException("اطلاعات Shadowsocks قابل پردازش نیست");
+            }
+        }
+
         private static Dictionary<string, string> ParseQueryString(string query)
         {
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -127,7 +171,7 @@ namespace ParsGate.Services
             var pairs = query.Split('&');
             foreach (var pair in pairs)
             {
-                var kv = pair.Split('=');
+                var kv = pair.Split('=', 2);
                 if (kv.Length == 2)
                 {
                     dict[Uri.UnescapeDataString(kv[0])] = Uri.UnescapeDataString(kv[1]);
@@ -204,7 +248,7 @@ namespace ParsGate.Services
             return configs;
         }
 
-        public static string GenerateXrayConfigJson(VpnConfigItem item, AppSettings settings, int localSocksPort = 10808)
+        public static string GenerateXrayConfigJson(VpnConfigItem item, AppSettings settings, int localSocksPort = XraySocksPort)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (settings == null) throw new ArgumentNullException(nameof(settings));
@@ -344,7 +388,7 @@ namespace ParsGate.Services
                                 {
                                     ["id"] = ExtractVlessUuid(item.RawUri),
                                     ["encryption"] = "none",
-                                    ["flow"] = ExtractQueryParam(item.RawUri, "flow") ?? ""
+                                    ["flow"] = ExtractQueryParam(item.RawUri, "flow") ?? "xtls-rprx-vision"
                                 }
                             }
                         }
@@ -382,6 +426,19 @@ namespace ParsGate.Services
                         }
                     };
                     break;
+
+                case "shadowsocks":
+                    settingsObj!["servers"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["address"] = item.ServerAddress,
+                            ["port"] = item.Port,
+                            ["method"] = item.ShadowsocksMethod ?? "aes-256-gcm",
+                            ["password"] = item.ShadowsocksPassword ?? ""
+                        }
+                    };
+                    break;
             }
 
             // Stream settings
@@ -393,20 +450,37 @@ namespace ParsGate.Services
 
             if (security == "tls" || security == "reality")
             {
-                var tlsSettings = new JsonObject
-                {
-                    ["serverName"] = ExtractQueryParam(item.RawUri, "sni") ?? item.ServerAddress,
-                    ["allowInsecure"] = false,
-                    ["fingerprint"] = ExtractQueryParam(item.RawUri, "fp") ?? "chrome"
-                };
+                var sni = ExtractQueryParam(item.RawUri, "sni") ?? item.ServerAddress;
+                var fingerprint = ExtractQueryParam(item.RawUri, "fp") ?? "chrome";
+                var alpn = ExtractQueryParam(item.RawUri, "alpn");
 
                 if (security == "reality")
                 {
-                    tlsSettings["publicKey"] = ExtractQueryParam(item.RawUri, "pbk") ?? "";
-                    tlsSettings["shortId"] = ExtractQueryParam(item.RawUri, "sid") ?? "";
+                    // Reality uses realitySettings, NOT tlsSettings
+                    var realitySettings = new JsonObject
+                    {
+                        ["serverName"] = sni,
+                        ["fingerprint"] = fingerprint,
+                        ["publicKey"] = ExtractQueryParam(item.RawUri, "pbk") ?? "",
+                        ["shortId"] = ExtractQueryParam(item.RawUri, "sid") ?? "",
+                        ["spiderX"] = ExtractQueryParam(item.RawUri, "spx") ?? "/"
+                    };
+                    streamSettings["realitySettings"] = realitySettings;
                 }
-
-                streamSettings["tlsSettings"] = tlsSettings;
+                else // security == "tls"
+                {
+                    var tlsSettings = new JsonObject
+                    {
+                        ["serverName"] = sni,
+                        ["allowInsecure"] = false,
+                        ["fingerprint"] = fingerprint
+                    };
+                    if (!string.IsNullOrWhiteSpace(alpn))
+                    {
+                        tlsSettings["alpn"] = new JsonArray(alpn.Split(',').Select(a => a.Trim()).ToArray());
+                    }
+                    streamSettings["tlsSettings"] = tlsSettings;
+                }
             }
 
             // Transport settings
@@ -432,11 +506,21 @@ namespace ParsGate.Services
                     break;
 
                 case "http":
-                case "xhttp":
+                case "h2":
                     streamSettings["httpSettings"] = new JsonObject
                     {
                         ["path"] = ExtractQueryParam(item.RawUri, "path") ?? "/",
                         ["host"] = new JsonArray(ExtractQueryParam(item.RawUri, "host") ?? item.ServerAddress)
+                    };
+                    break;
+
+                case "xhttp":
+                    var mode = ExtractQueryParam(item.RawUri, "mode") ?? "auto";
+                    streamSettings["xhttpSettings"] = new JsonObject
+                    {
+                        ["path"] = ExtractQueryParam(item.RawUri, "path") ?? "/",
+                        ["host"] = new JsonArray(ExtractQueryParam(item.RawUri, "host") ?? item.ServerAddress),
+                        ["mode"] = mode
                     };
                     break;
             }

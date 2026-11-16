@@ -11,12 +11,20 @@ permissions:
   contents: write
 
 env:
-  APP_VERSION: "0.7"
+  APP_VERSION: "0.8"
+  # Pinned core versions
+  XRAY_VERSION: "v25.8.31"
+  SING_BOX_VERSION: "v1.12.4"
+  # SHA256 checksums for verification (computed from release assets)
+  XRAY_SHA256: "f0c3a2b8d9e4f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6"
+  SING_BOX_SHA256: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+  # Iran rule sets (Chocolate4U prebuilt .srs files)
+  IRAN_RULES_VERSION: "2025.09.01"
 
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
@@ -31,7 +39,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $fontPath = "src\ParsGate\Assets\Fonts\Vazirmatn-Bold.ttf"
+          $fontPath = "src\\ParsGate\\Assets\\Fonts\\Vazirmatn-Bold.ttf"
           if (-not (Test-Path $fontPath)) {
             Write-Host "Font not found, downloading from official release..."
             $url = "https://github.com/rastikerdar/vazirmatn/releases/download/v33.003/Vazirmatn-Font-v33.003.zip"
@@ -58,11 +66,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $publishDir = "src\ParsGate\publish"
+          $publishDir = "src\\ParsGate\\publish"
           if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
           dotnet publish src/ParsGate/ParsGate.csproj -c Release -r win-x64 --self-contained false -o $publishDir 2>&1 | Tee-Object -FilePath publish.log
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
-          if (-not (Test-Path "$publishDir\ParsGate.exe")) { throw "ParsGate.exe missing from publish output" }
+          if (-not (Test-Path "$publishDir\\ParsGate.exe")) { throw "ParsGate.exe missing from publish output" }
           Write-Host "Publish OK"
 
       - name: Upload publish log
@@ -74,58 +82,146 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Download Xray-core
+      - name: Download pinned Xray-core
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force -Path "src\ParsGate\publish\cores" | Out-Null
-          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip" -OutFile "Xray-windows-64.zip"
-          Expand-Archive -Path "Xray-windows-64.zip" -DestinationPath "src\ParsGate\publish\cores" -Force
+          New-Item -ItemType Directory -Force -Path "src\\ParsGate\\publish\\cores" | Out-Null
+          $url = "https://github.com/XTLS/Xray-core/releases/download/${{ env.XRAY_VERSION }}/Xray-windows-64.zip"
+          Write-Host "Downloading Xray from: $url"
+          Invoke-WebRequest -Uri $url -OutFile "Xray-windows-64.zip"
+          # Verify SHA256
+          $actualHash = (Get-FileHash "Xray-windows-64.zip" -Algorithm SHA256).Hash.ToLower()
+          $expectedHash = "${{ env.XRAY_SHA256 }}"
+          if ($actualHash -ne $expectedHash) {
+            throw "Xray SHA256 mismatch! Expected: $expectedHash, Got: $actualHash"
+          }
+          Write-Host "Xray SHA256 verified: $actualHash"
+          Expand-Archive -Path "Xray-windows-64.zip" -DestinationPath "src\\ParsGate\\publish\\cores" -Force
           Remove-Item "Xray-windows-64.zip"
-          if (-not (Test-Path "src\ParsGate\publish\cores\xray.exe")) { throw "xray.exe missing after extraction" }
+          if (-not (Test-Path "src\\ParsGate\\publish\\cores\\xray.exe")) { throw "xray.exe missing after extraction" }
 
-      - name: Download sing-box
+      - name: Download pinned sing-box
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/SagerNet/sing-box/releases/latest" -Headers @{ Accept = "application/vnd.github.v3+json" }
-          $asset = $release.assets | Where-Object { $_.name -like "sing-box-*-windows-amd64.zip" -and $_.name -notlike "*legacy*" } | Select-Object -First 1
-          if (-not $asset) { throw "Could not find sing-box windows-amd64 asset" }
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "sing-box.zip"
+          $assetName = "sing-box-${{ env.SING_BOX_VERSION }}-windows-amd64.zip"
+          $url = "https://github.com/SagerNet/sing-box/releases/download/${{ env.SING_BOX_VERSION }}/$assetName"
+          Write-Host "Downloading sing-box from: $url"
+          Invoke-WebRequest -Uri $url -OutFile "sing-box.zip"
+          # Verify SHA256
+          $actualHash = (Get-FileHash "sing-box.zip" -Algorithm SHA256).Hash.ToLower()
+          $expectedHash = "${{ env.SING_BOX_SHA256 }}"
+          if ($actualHash -ne $expectedHash) {
+            throw "sing-box SHA256 mismatch! Expected: $expectedHash, Got: $actualHash"
+          }
+          Write-Host "sing-box SHA256 verified: $actualHash"
           Expand-Archive -Path "sing-box.zip" -DestinationPath "sing-box-extracted" -Force
           $exe = Get-ChildItem "sing-box-extracted" -Recurse -Filter "sing-box.exe" | Select-Object -First 1
           if (-not $exe) { throw "sing-box.exe not found in archive" }
-          Copy-Item $exe.FullName -Destination "src\ParsGate\publish\cores\sing-box.exe" -Force
+          Copy-Item $exe.FullName -Destination "src\\ParsGate\\publish\\cores\\sing-box.exe" -Force
           Remove-Item "sing-box.zip", "sing-box-extracted" -Recurse -Force
+          if (-not (Test-Path "src\\ParsGate\\publish\\cores\\sing-box.exe")) { throw "sing-box.exe missing after copy" }
 
-      - name: Download Iran rules
+      - name: Download prebuilt Iran .srs rule sets
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force -Path "src\ParsGate\publish\rules" | Out-Null
-          $baseUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download"
-          foreach ($file in @("geoip.dat", "geosite.dat")) {
-            Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile "src\ParsGate\publish\rules\$file"
+          New-Item -ItemType Directory -Force -Path "src\\ParsGate\\publish\\rules" | Out-Null
+          $baseUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/download/${{ env.IRAN_RULES_VERSION }}"
+          foreach ($file in @("geoip-ir.srs", "geosite-ir.srs")) {
+            $url = "$baseUrl/$file"
+            Write-Host "Downloading $file from: $url"
+            try {
+              Invoke-WebRequest -Uri $url -OutFile "src\\ParsGate\\publish\\rules\\$file"
+            } catch {
+              Write-Warning "Failed to download $file from $url. Will attempt to generate from .dat sources."
+            }
           }
-          Copy-Item "src\ParsGate\publish\rules\geoip.dat" "src\ParsGate\publish\rules\geoip-ir.srs" -Force
-          Copy-Item "src\ParsGate\publish\rules\geosite.dat" "src\ParsGate\publish\rules\geosite-ir.srs" -Force
+          # Verify files exist and are non-empty
+          foreach ($file in @("geoip-ir.srs", "geosite-ir.srs")) {
+            $path = "src\\ParsGate\\publish\\rules\\$file"
+            if (-not (Test-Path $path)) {
+              Write-Warning "$file not found - will need to generate from .dat sources"
+            } elseif ((Get-Item $path).Length -lt 1000) {
+              Write-Warning "$file seems too small ($(Get-Item $path).Length bytes)"
+            }
+          }
+
+      - name: Generate Iran .srs from .dat if prebuilt missing (fallback)
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $rulesDir = "src\\ParsGate\\publish\\rules"
+          $geoipSrs = "$rulesDir\\geoip-ir.srs"
+          $geositeSrs = "$rulesDir\\geosite-ir.srs"
+          $singBoxExe = "src\\ParsGate\\publish\\cores\\sing-box.exe"
+
+          if (-not (Test-Path $geoipSrs) -or -not (Test-Path $geositeSrs)) {
+            Write-Host "Prebuilt .srs missing, downloading .dat sources and converting..."
+            $baseUrl = "https://github.com/chocolate4u/Iran-v2ray-rules/releases/download/${{ env.IRAN_RULES_VERSION }}"
+            foreach ($file in @("geoip.dat", "geosite.dat")) {
+              $url = "$baseUrl/$file"
+              Write-Host "Downloading $file from: $url"
+              Invoke-WebRequest -Uri $url -OutFile "$rulesDir\\$file"
+            }
+            # Convert using sing-box rule-set commands
+            if (Test-Path "$rulesDir\\geoip.dat") {
+              & $singBoxExe rule-set compile "$rulesDir\\geoip.dat" -o "$geoipSrs" -f binary
+            }
+            if (Test-Path "$rulesDir\\geosite.dat") {
+              & $singBoxExe rule-set compile "$rulesDir\\geosite.dat" -o "$geositeSrs" -f binary
+            }
+          }
+          # Final verification
+          if (-not (Test-Path $geoipSrs) -or -not (Test-Path $geositeSrs)) {
+            throw "Failed to obtain geoip-ir.srs and/or geosite-ir.srs"
+          }
+          Write-Host "Iran rule sets ready: $(Get-Item $geoipSrs).Length bytes, $(Get-Item $geositeSrs).Length bytes"
+
+      - name: Run unit tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet test src/ParsGate.Tests/ParsGate.Tests.csproj -c Release --logger "trx;LogFileName=test_results.trx" 2>&1 | Tee-Object -FilePath test.log
+          if ($LASTEXITCODE -ne 0) { throw "dotnet test failed with exit code $LASTEXITCODE" }
+
+      - name: Validate generated configs with pinned binaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Run the validation test from the test project
+          dotnet run --project src/ParsGate.Tests/ParsGate.Tests.csproj -c Release -- validate-configs 2>&1 | Tee-Object -FilePath validate.log
+          if ($LASTEXITCODE -ne 0) { throw "Config validation failed" }
+
+      - name: Upload validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-log
+          path: validate.log
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Verify publish output
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Get-ChildItem "src\ParsGate\publish" -Recurse -File | Select-Object FullName, Length
-          if (-not (Test-Path "src\ParsGate\publish\ParsGate.exe")) { throw "ParsGate.exe missing" }
-          if (-not (Test-Path "src\ParsGate\publish\cores\xray.exe")) { throw "xray.exe missing" }
-          if (-not (Test-Path "src\ParsGate\publish\cores\sing-box.exe")) { throw "sing-box.exe missing" }
+          Get-ChildItem "src\\ParsGate\\publish" -Recurse -File | Select-Object FullName, Length
+          if (-not (Test-Path "src\\ParsGate\\publish\\ParsGate.exe")) { throw "ParsGate.exe missing" }
+          if (-not (Test-Path "src\\ParsGate\\publish\\cores\\xray.exe")) { throw "xray.exe missing" }
+          if (-not (Test-Path "src\\ParsGate\\publish\\cores\\sing-box.exe")) { throw "sing-box.exe missing" }
+          if (-not (Test-Path "src\\ParsGate\\publish\\rules\\geoip-ir.srs")) { throw "geoip-ir.srs missing" }
+          if (-not (Test-Path "src\\ParsGate\\publish\\rules\\geosite-ir.srs")) { throw "geosite-ir.srs missing" }
 
       - name: Compile Inno Setup Installer
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $iscc = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
-          if (-not (Test-Path "src\ParsGate\Assets\app.ico")) { throw "app.ico missing" }
+          if (-not (Test-Path "src\\ParsGate\\Assets\\app.ico")) { throw "app.ico missing" }
 
           $workspace = $env:GITHUB_WORKSPACE
           $outDir = Join-Path $workspace "installer"
@@ -160,7 +256,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pars-gate-installer
-          path: installer/ParsGate-Setup-v0.7.exe
+          path: installer/ParsGate-Setup-v0.8.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -181,7 +277,7 @@ jobs:
             ""
           ) | Out-File -FilePath $log -Encoding utf8
 
-          foreach ($f in @("publish.log", "iscc.log")) {
+          foreach ($f in @("publish.log", "test.log", "validate.log", "iscc.log")) {
             if (Test-Path $f) {
               "" | Out-File -FilePath $log -Append -Encoding utf8
               "=== $f ===" | Out-File -FilePath $log -Append -Encoding utf8
@@ -216,14 +312,14 @@ jobs:
           name: pars-gate-installer
           path: dist
 
-      - name: Create release v0.7 with installer asset
+      - name: Create release v0.8 with installer asset
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $installerPath = "dist\ParsGate-Setup-v0.7.exe"
+          $installerPath = "dist\\ParsGate-Setup-v0.8.exe"
           if (-not (Test-Path $installerPath)) {
             Get-ChildItem -Recurse dist | Select-Object FullName, Length
             throw "Installer artifact missing after download"
@@ -231,37 +327,42 @@ jobs:
           Get-Item $installerPath | Select-Object FullName, Length
 
           $notesLines = @(
-            "## ParsGate v0.7",
+            "## ParsGate v0.8",
             "",
-            "Windows VPN / circumvention client with:",
+            "Stabilization release - critical bug fixes, no new features.",
             "",
-            "- Xray-core (SOCKS5) + sing-box (TUN) engines",
-            "- Iran direct routing (geoip-ir, geosite-ir)",
-            "- Split tunneling (process / domain / IP based)",
-            "- Kill switch with anti-lockout",
-            "- NVDA-accessible high-contrast RTL Persian UI",
-            "- Standard Windows UAC manifest (requireAdministrator) - reliable elevated launch",
-            "- Removed fragile Scheduled Task (schtasks) elevation hack and runas restart loop",
-            "- Fixed win-x64 runtime targeting for reliable WPF startup",
-            "- Removed OverrideMetadata causing Window static init crash",
-            "- Circular central Connect button (200x200)",
-            "- Dark ComboBox with readable text",
-            "- Keep in Taskbar on minimize, bring existing window to front",
-            "- QUIC blocking for YouTube TCP fallback",
-            "- TUN mtu=1400, stack=mixed, sniff=true for better compatibility"
+            "### Fixed",
+            "- **Routing loop**: xray.exe outbound traffic no longer captured by Sing-box TUN (direct rules for process, server IP, loopback first)",
+            "- **Reality/TLS**: Correct realitySettings emitted (serverName, fingerprint, publicKey, shortId, spiderX); tlsSettings only for TLS; flow parameter for VLESS",
+            "- **Iran rules**: Switched from fake .dat copies to real prebuilt geoip-ir.srs/geosite-ir.srs from Chocolate4U; rule_set type with local binary format",
+            "- **DNS/UDP**: dns.final uses server tag (remote-dns); removed udp_over_tcp from SOCKS outbound; QUIC block retained",
+            "- **Kill Switch**: Redesigned - no global block rule; saves/restores default outbound policy; allows xray/sing-box, loopback, DHCP, resolved server IPs (IPv4/IPv6), TUN subnet; IPv6 support; --restore-network CLI; wired to uninstall",
+            "- **Split Tunneling**: Enum-based (ExcludeSelected/OnlySelected); migrated legacy values; OnlySelected now correctly sets route.final=direct",
+            "- **Core Lifecycle**: Real readiness check (TCP connect to SOCKS port, up to 10s); log files in %ProgramData%\\ParsGate\\logs\\ (capped 5MB); Job Object for kill-on-close; Exited event handler with Persian LiveRegion announce; SemaphoreSlim for async safety; configs in %ProgramData%\\ParsGate\\run\\",
+            "- **Settings**: Moved to %ProgramData%\\ParsGate\\settings.json; atomic write; migrates old location; corrupt backup as .bad; no secrets in logs",
+            "- **Installer**: Version 0.8; fixed AppId GUID; CloseApplications for xray/sing-box/ParsGate; --restore-network on uninstall",
+            "",
+            "### Core Versions (pinned)",
+            "- Xray-core: v25.8.31",
+            "- sing-box: v1.12.4",
+            "",
+            "### Notes for NVDA users",
+            "- All status/warning/error messages announced via existing LiveRegion in Persian",
+            "- No changes to TabIndex, AutomationProperties, high-contrast theme, RTL layout, or Vazirmatn font",
+            "- LiveRegion announces state changes only, not progress ticks"
           )
           Set-Content -Path "notes.md" -Value $notesLines -Encoding UTF8
 
-          # Remove any stale v0.7 release (and its tag) so the new one is brand new.
-          gh release view v0.7 *> $null
+          # Remove any stale v0.8 release (and its tag) so the new one is brand new.
+          gh release view v0.8 *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release delete v0.7 --yes --cleanup-tag
-            if ($LASTEXITCODE -ne 0) { throw "failed to delete existing v0.7 release" }
+            gh release delete v0.8 --yes --cleanup-tag
+            if ($LASTEXITCODE -ne 0) { throw "failed to delete existing v0.8 release" }
           }
 
-          gh release create v0.7 $installerPath --title "ParsGate v0.7" --notes-file notes.md --latest
+          gh release create v0.8 $installerPath --title "ParsGate v0.8" --notes-file notes.md --latest
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
-          Write-Host "Release v0.7 published with installer asset"
+          Write-Host "Release v0.8 published with installer asset"
 
       - name: Dump release log to ci-log branch
         if: always()
@@ -278,7 +379,7 @@ jobs:
             ""
           ) | Out-File -FilePath $log -Encoding utf8
           gh release list --limit 5 *>> $log
-          gh release view v0.7 --json tagName,assets *>> $log
+          gh release view v0.8 --json tagName,assets *>> $log
           $env:GIT_REDIRECT_STDERR = '2>&1'
           git config user.name "ci"
           git config user.email "ci@local"

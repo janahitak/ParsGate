@@ -1,12 +1,14 @@
 ; ParsGate Inno Setup Script
 ; Build: iscc.exe setup.iss
-; Output: ParsGate-Setup-v0.7.exe
+; Output: ParsGate-Setup-v0.8.exe
 
 #define MyAppName "ParsGate"
-#define MyAppVersion "0.7"
+#define MyAppVersion "0.8"
 #define MyAppPublisher "ParsGate Team"
 #define MyAppURL "https://github.com/janahitak/ParsGate"
 #define MyAppExeName "ParsGate.exe"
+; Fixed AppId GUID for upgrades - DO NOT CHANGE after first release
+#define MyAppId "{{1F2E3D4C-5B6A-7E8F-9A0B-C1D2E3F4A5B6}"
 
 [Setup]
 AppName={#MyAppName}
@@ -19,7 +21,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=no
 OutputDir=.
-OutputBaseFilename=ParsGate-Setup-v0.7
+OutputBaseFilename=ParsGate-Setup-v0.8
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -27,6 +29,10 @@ PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64
 SetupIconFile=..\src\ParsGate\Assets\app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
+AppId={#MyAppId}
+; Close running instances before install/upgrade
+CloseApplications=force
+CloseApplicationsFilter=ParsGate.exe|xray.exe|sing-box.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -48,14 +54,10 @@ Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFil
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent; Tasks: launchafterinstall
 
 [UninstallRun]
-Filename: "taskkill.exe"; Parameters: "/f /im ParsGate.exe /im xray.exe /im sing-box.exe"; Flags: runhidden; StatusMsg: "Stopping processes..."
-Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ParsGate_KillSwitch_Block\""; Flags: runhidden
-Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ParsGate_KillSwitch_AllowCore_Xray\""; Flags: runhidden
-Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ParsGate_KillSwitch_AllowCore_SingBox\""; Flags: runhidden
-Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ParsGate_KillSwitch_AllowCore_Server\""; Flags: runhidden
-Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ParsGate_KillSwitch_AllowLoopback\""; Flags: runhidden
-Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ParsGate_KillSwitch_AllowDHCP\""; Flags: runhidden
-Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ParsGate_KillSwitch_AllowDNS\""; Flags: runhidden
+; Run --restore-network to clean up Kill Switch rules and restore default firewall policy
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--restore-network"; Flags: runhidden waituntilterminated; StatusMsg: "Restoring network..."
+; Fallback: delete any leftover ParsGate_KS_ rules (in case --restore-network fails)
+Filename: "cmd.exe"; Parameters: "/c for /f \"tokens=*\" %i in ('netsh advfirewall firewall show rule name=all ^| findstr /i \"ParsGate_KS_\"') do netsh advfirewall firewall delete rule name=\"%i\""; Flags: runhidden
 
 [Code]
 function InitializeSetup(): Boolean;
