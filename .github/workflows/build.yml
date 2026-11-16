@@ -15,9 +15,9 @@ env:
   # Pinned core versions
   XRAY_VERSION: "v25.8.31"
   SING_BOX_VERSION: "v1.12.4"
-  # SHA256 checksums for verification (computed from release assets)
-  XRAY_SHA256: "f0c3a2b8d9e4f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6"
-  SING_BOX_SHA256: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+  # SHA256 checksums for verification (from release assets)
+  XRAY_SHA256: "993c952450cd6518a0ca46e938888d820732b8b1f376b6b76d941d6970c2580e"
+  SING_BOX_SHA256: "36150aa3e427ca460785d02a2960eed9bb2570e9d6f199cf45f088fb2f4b4675"
   # Iran rule sets (Chocolate4U prebuilt .srs files)
   IRAN_RULES_VERSION: "2025.09.01"
 
@@ -191,8 +191,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # Run the validation test from the test project
-          dotnet run --project src/ParsGate.Tests/ParsGate.Tests.csproj -c Release -- validate-configs 2>&1 | Tee-Object -FilePath validate.log
+          # Run the validation console app
+          dotnet run --project src/ParsGate.Validation/ParsGate.Validation.csproj -c Release 2>&1 | Tee-Object -FilePath validate.log
           if ($LASTEXITCODE -ne 0) { throw "Config validation failed" }
 
       - name: Upload validation log
